@@ -13,6 +13,7 @@ lazy val Version = new {
   val monix = "3.1.0"
   val izumi = "0.9.12"
   val gson = "2.8.6"
+  val jackson = "2.9.8"
 }
 
 lazy val root = project
@@ -23,7 +24,9 @@ lazy val root = project
   )
   .aggregate(
     logbackZio,
-    logbackMonix,
+    logbackMonixGson,
+    logbackMonixJackson,
+    logstageMonix,
   )
 
 lazy val logbackZio = project
@@ -40,17 +43,28 @@ lazy val logbackZio = project
     )
   )
 
-lazy val logbackMonix = project
-  .in(file("logback-monix"))
+lazy val logbackMonixGson = project
+  .in(file("logback-monix-gson"))
   .settings(
-    name := "logback-monix",
+    name := "logback-monix-gson",
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % Version.slf4j,
       "ch.qos.logback" % "logback-classic" % Version.logback,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
       "com.google.code.gson" % "gson" % Version.gson,
-//      "io.circe" %% "circe-core" % Version.circe,
-//      "io.circe" %% "circe-generic" % Version.circe,
+      "io.monix" %% "monix" %  Version.monix,
+    )
+  )
+
+lazy val logbackMonixJackson = project
+  .in(file("logback-monix-jackson"))
+  .settings(
+    name := "logback-monix-jackson",
+    libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % Version.slf4j,
+      "ch.qos.logback" % "logback-classic" % Version.logback,
+      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
+      "com.fasterxml.jackson.core" % "jackson-databind" % Version.jackson,
       "io.monix" %% "monix" %  Version.monix,
     )
   )
