@@ -1,4 +1,4 @@
-package loggingexperiment
+package loggingexperiment.logbackzio
 
 //import cats.effect.{ExitCode, IO, IOApp, Sync}
 import io.circe.Encoder
