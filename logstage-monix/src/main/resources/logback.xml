@@ -1,0 +1,19 @@
+<configuration>
+    <root level="INFO">
+        <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+            <file>log/loggingexperiment.log</file>
+            <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
+                <providers>
+                    <timestamp/>
+                    <version/>
+                    <loggerName/>
+                    <pattern>
+                        <pattern>
+                            { "message": "#asJson{%message}" }
+                        </pattern>
+                    </pattern>
+                </providers>
+            </encoder>
+        </appender>
+    </root>
+</configuration>

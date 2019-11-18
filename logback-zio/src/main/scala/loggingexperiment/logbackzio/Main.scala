@@ -25,7 +25,7 @@ object Log {
       implicit ex: Encoder[A],
       ey: Encoder[B]
     ): UIO[Unit]
-    def addContext[A](format: String, xName: String, x: A)(
+    def addContext[A](xName: String, x: A)(
       implicit e: Encoder[A]
     ): UManaged[Unit]
   }
@@ -49,9 +49,8 @@ object Log {
         }
       } yield ()
 
-    override def addContext[A](format: String, xName: String, x: A)(
-      implicit e: Encoder[A]
-    ): UManaged[Unit] = {
+    override def addContext[A](xName: String,
+                               x: A)(implicit e: Encoder[A]): UManaged[Unit] = {
       Managed.make {
         for {
           _ <- mdc.update { mdc =>
@@ -134,11 +133,10 @@ object Main extends App {
   def program: RIO[Log, Unit] = {
     for {
       logger <- Log.log
-      _ <- logger.addContext("XXXXXXX {} ", "yyy", A(567, "YYYYYYYYYYYY")).use {
-        _: Unit =>
-          for {
-            _ <- logger.info("Hello {}", "o", o)
-          } yield ()
+      _ <- logger.addContext("yyy", A(567, "YYYYYYYYYYYY")).use { _: Unit =>
+        for {
+          _ <- logger.info("Hello {}", "o", o)
+        } yield ()
       }
       _ <- logger.info("Hello {}", "o", o)
       _ <- logger.info("Hello2 {} and {}", "x", 123, "o", o)

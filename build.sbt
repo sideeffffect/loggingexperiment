@@ -11,6 +11,7 @@ lazy val Version = new {
   val logstashLogback = "6.2"
   val zio = "1.0.0-RC16"
   val monix = "3.1.0"
+  val izumi = "0.9.12"
 }
 
 lazy val root = project
@@ -21,6 +22,7 @@ lazy val root = project
   )
   .aggregate(
     logbackZio,
+    logbackMonix,
   )
 
 lazy val logbackZio = project
@@ -48,5 +50,22 @@ lazy val logbackMonix = project
       "io.circe" %% "circe-core" % Version.circe,
       "io.circe" %% "circe-generic" % Version.circe,
       "io.monix" %% "monix" %  Version.monix,
+    )
+  )
+
+lazy val logstageMonix = project
+  .in(file("logstage-monix"))
+  .settings(
+    name := "logstage-monix",
+    libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % Version.slf4j,
+      "ch.qos.logback" % "logback-classic" % Version.logback,
+      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
+      "io.circe" %% "circe-core" % Version.circe,
+      "io.circe" %% "circe-generic" % Version.circe,
+      "io.monix" %% "monix" %  Version.monix,
+      "io.7mind.izumi" %% "logstage-core" % Version.izumi,
+      "io.7mind.izumi" %% "logstage-rendering-circe" % Version.izumi,
+      "io.7mind.izumi" %% "logstage-sink-slf4j" % Version.izumi,
     )
   )
