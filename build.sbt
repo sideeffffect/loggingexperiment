@@ -12,6 +12,7 @@ lazy val Version = new {
   val zio = "1.0.0-RC16"
   val monix = "3.1.0"
   val izumi = "0.9.12"
+  val gson = "2.8.6"
 }
 
 lazy val root = project
@@ -47,8 +48,9 @@ lazy val logbackMonix = project
       "org.slf4j" % "slf4j-api" % Version.slf4j,
       "ch.qos.logback" % "logback-classic" % Version.logback,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
-      "io.circe" %% "circe-core" % Version.circe,
-      "io.circe" %% "circe-generic" % Version.circe,
+      "com.google.code.gson" % "gson" % Version.gson,
+//      "io.circe" %% "circe-core" % Version.circe,
+//      "io.circe" %% "circe-generic" % Version.circe,
       "io.monix" %% "monix" %  Version.monix,
     )
   )

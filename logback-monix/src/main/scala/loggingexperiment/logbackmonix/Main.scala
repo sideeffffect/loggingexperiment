@@ -1,9 +1,7 @@
 package loggingexperiment.logbackmonix
 
 import cats.effect._
-import io.circe.Encoder
-import io.circe.generic.auto._
-import io.circe.syntax._
+import com.google.gson.Gson
 import monix.eval._
 import monix.execution.Scheduler
 import net.logstash.logback.argument.StructuredArguments
@@ -14,27 +12,28 @@ final case class A(x: Int, y: String)
 final case class B(a: A, b: Boolean)
 
 trait Log {
-  def info[A](format: String, xName: String, x: A)(
-    implicit e: Encoder[A]
-  ): Task[Unit]
-  def info[A, B](format: String, xName: String, x: A, yName: String, y: B)(
-    implicit ex: Encoder[A],
-    ey: Encoder[B]
-  ): Task[Unit]
-  def addContext[A](xName: String, x: A)(implicit e: Encoder[A],
-                                         sch: Scheduler): Resource[Task, Unit]
+  def info(format: String, xName: String, x: Any): Task[Unit]
+  def info(format: String,
+           xName: String,
+           x: Any,
+           yName: String,
+           y: Any): Task[Unit]
+  def addContext(xName: String, x: Any)(
+    implicit sch: Scheduler
+  ): Resource[Task, Unit]
 }
 
 object Log {
-  private class LogImpl(logger: Logger,
-                        mdc: TaskLocal[Map[String, List[(Any, Encoder[Any])]]])
+  private class LogImpl(logger: Logger, mdc: TaskLocal[Map[String, List[Any]]])
       extends Log {
+
+    private val gson = new Gson()
 
     private def log(body: LogstashMarker => Unit): Task[Unit] =
       for {
         mdc <- mdc.read
         mdcNormalized = mdc.toList.map {
-          case (k, v) => (k, v.head match { case (v, e) => e(v).spaces2 })
+          case (k, v :: _) => (k, gson.toJson(v))
         }
         markers = mdcNormalized.map { case (k, v) => Markers.appendRaw(k, v) }
         _ <- Task.delay {
@@ -42,18 +41,17 @@ object Log {
         }
       } yield ()
 
-    override def addContext[A](
-      xName: String,
-      x: A
-    )(implicit e: Encoder[A], sch: Scheduler): Resource[Task, Unit] = {
+    override def addContext(xName: String, x: Any)(
+      implicit sch: Scheduler
+    ): Resource[Task, Unit] = {
       Resource.make {
         for {
           ctx <- mdc.read
           ctxNew = ctx.get(xName) match {
             case Some(list) =>
-              ctx + ((xName, (x, e.asInstanceOf[Encoder[Any]]) :: list))
+              ctx + ((xName, x :: list))
             case None =>
-              ctx + ((xName, (x, e.asInstanceOf[Encoder[Any]]) :: Nil))
+              ctx + ((xName, x :: Nil))
           }
           _ <- mdc.write(ctxNew)
         } yield ()
@@ -71,37 +69,33 @@ object Log {
       }
     }
 
-    override def info[A](format: String, xName: String, x: A)(
-      implicit e: Encoder[A]
-    ): Task[Unit] =
+    override def info(format: String, xName: String, x: Any): Task[Unit] =
       log { mdc =>
         logger.info(
           mdc,
           format,
-          StructuredArguments.raw(xName, x.asJson.spaces2),
+          StructuredArguments.raw(xName, gson.toJson(x)),
         )
       }
 
-    override def info[A, B](
-      format: String,
-      xName: String,
-      x: A,
-      yName: String,
-      y: B
-    )(implicit ex: Encoder[A], ey: Encoder[B]): Task[Unit] =
+    override def info(format: String,
+                      xName: String,
+                      x: Any,
+                      yName: String,
+                      y: Any): Task[Unit] =
       log { mdc =>
         logger.info(
           mdc,
           format,
-          StructuredArguments.raw(xName, x.asJson.spaces2),
-          StructuredArguments.raw(yName, y.asJson.spaces2): Any,
+          StructuredArguments.raw(xName, gson.toJson(x)),
+          StructuredArguments.raw(yName, gson.toJson(y)): Any,
         )
       }
   }
 
   def make(logger: Logger): Task[Log] = {
     for {
-      mdc <- TaskLocal(Map.empty[String, List[(Any, Encoder[Any])]])
+      mdc <- TaskLocal(Map.empty[String, List[Any]])
       logImpl = new LogImpl(logger, mdc)
     } yield logImpl
   }
