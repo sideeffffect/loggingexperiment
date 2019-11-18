@@ -3,7 +3,7 @@
         <appender name="FILE" class="ch.qos.logback.core.FileAppender">
             <file>log/loggingexperiment.log</file>
             <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <!--<customFields>{"application":"loggingexperiment"}</customFields>-->
+                <customFields>{"application":"loggingexperiment"}</customFields>
             </encoder>
         </appender>
     </root>

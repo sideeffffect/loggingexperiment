@@ -1,15 +1,12 @@
 package loggingexperiment.logbackzio
 
-//import cats.effect.{ExitCode, IO, IOApp, Sync}
 import io.circe.Encoder
-import org.slf4j.{Logger, LoggerFactory, MDC}
-import net.logstash.logback.argument.StructuredArguments
-import net.logstash.logback.marker.{LogstashMarker, Markers}
 import io.circe.generic.auto._
 import io.circe.syntax._
-import zio.{UManaged, _}
-
-import collection.JavaConverters._
+import net.logstash.logback.argument.StructuredArguments
+import net.logstash.logback.marker.{LogstashMarker, Markers}
+import org.slf4j.{Logger, LoggerFactory}
+import zio._
 
 final case class A(x: Int, y: String)
 final case class B(a: A, b: Boolean)
@@ -49,15 +46,6 @@ object Log {
         markers = mdcNormalized.map { case (k, v) => Markers.appendRaw(k, v) }
         _ <- UIO.effectTotal {
           body(Markers.aggregate(markers: _*))
-//          val context = mdc.map {
-//            case (k, v) =>
-//              MDC.putCloseable(k, v.head match { case (v, e) => e(v).toString })
-//          }
-//          try {
-//            body(mdc.map{ case (n, l)})
-//          } finally {
-//            context.foreach(_.close)
-//          }
         }
       } yield ()
 
@@ -131,29 +119,7 @@ object Log {
 
 object Main extends App {
 
-//  implicit final class LoggerOps(val logger: Logger) extends AnyVal {
-//    def info_[A](format: String, xName: String, x: A)(
-//      implicit e: Encoder[A]
-//    ): UIO[Unit] = {
-//      UIO.effectTotal(
-//        logger.info(format, StructuredArguments.raw(xName, x.asJson.toString))
-//      )
-//    }
-//    def info_[A, B](format: String, xName: String, x: A, yName: String, y: B)(
-//      implicit ex: Encoder[A],
-//      ey: Encoder[B]
-//    ): UIO[Unit] = {
-//      UIO.effectTotal(
-//        logger.info(
-//          format,
-//          StructuredArguments.raw(xName, x.asJson.toString),
-//          StructuredArguments.raw(yName, y.asJson.toString): Any
-//        )
-//      )
-//    }
-//  }
-
-  val logger: Logger = LoggerFactory.getLogger(Main.getClass)
+  val logger: Logger = LoggerFactory.getLogger(getClass)
   val o = B(A(123, "Hello"), b = true)
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
@@ -179,20 +145,4 @@ object Main extends App {
     } yield ()
   }
 
-//  def run(args: Array[String]): Unit = {
-//
-//    println(s"Hello $o")
-//    logger.info(s"Hello $o")
-//    logger.info("Hello {}", o)
-//    logger.info("Hello o={}", o)
-//    logger.info("Hello array {}", StructuredArguments.array("o", o))
-//    logger.info(
-//      "Hello entries {}",
-//      StructuredArguments.entries(o.asJsonObject.toMap.asJava)
-//    )
-//    logger.info("Hello fields {}", StructuredArguments.fields("o", o))
-//    logger.info("Hello keyValue {}", StructuredArguments.keyValue("o", o))
-//    logger.info("Hello raw {}", StructuredArguments.raw("o", o.asJson.toString))
-//    logger.info("Hello value {}", StructuredArguments.value("o", o))
-//  }
 }

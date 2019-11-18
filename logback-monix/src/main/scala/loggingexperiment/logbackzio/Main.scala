@@ -112,7 +112,7 @@ object Log {
 
 object Main extends TaskApp {
 
-  val logger: Logger = LoggerFactory.getLogger(Main.getClass)
+  val logger: Logger = LoggerFactory.getLogger(getClass)
   val o = B(A(123, "Hello"), b = true)
 
   override def run(args: List[String]): Task[ExitCode] =
