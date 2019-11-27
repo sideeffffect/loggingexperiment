@@ -14,6 +14,8 @@ lazy val Version = new {
   val izumi = "0.9.12"
   val gson = "2.8.6"
   val jackson = "2.9.8"
+  val catsMtl = "0.7.0"
+  val meowMtl = "0.4.0"
 }
 
 lazy val root = project
@@ -27,6 +29,7 @@ lazy val root = project
     logbackMonixGson,
     logbackMonixJackson,
     logstageMonix,
+    logbackMtl,
   )
 
 lazy val logbackZio = project
@@ -83,5 +86,21 @@ lazy val logstageMonix = project
       "io.7mind.izumi" %% "logstage-core" % Version.izumi,
       "io.7mind.izumi" %% "logstage-rendering-circe" % Version.izumi,
       "io.7mind.izumi" %% "logstage-sink-slf4j" % Version.izumi,
+    )
+  )
+
+lazy val logbackMtl = project
+  .in(file("logback-mtl"))
+  .settings(
+    name := "logback-mtl",
+    libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % Version.slf4j,
+      "ch.qos.logback" % "logback-classic" % Version.logback,
+      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
+      "io.circe" %% "circe-core" % Version.circe,
+      "io.circe" %% "circe-generic" % Version.circe,
+      "io.monix" %% "monix" %  Version.monix,
+      "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
+      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
     )
   )

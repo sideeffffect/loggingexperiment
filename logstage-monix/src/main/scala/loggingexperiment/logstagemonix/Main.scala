@@ -33,10 +33,12 @@ object Main extends TaskApp {
 
   def program(logger: LogIO[Task])(implicit sch: Scheduler): Task[Unit] = {
     val logger_ = logger("yyy" -> A(567, "YYYYYYYYYYYY"))
+    val justAList = List[Any](10, "green", "bottles")
     for {
       _ <- logger_.info(s"Hello $o")
       _ <- logger.info(s"Hello $o")
       _ <- logger.info(s"Hello2 ${123} and $o")
+      _ <- logger.info(s"Argument: $justAList")
     } yield ()
   }
 
