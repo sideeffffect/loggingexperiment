@@ -161,14 +161,14 @@ object Main extends TaskApp {
   def program(logger: Log[Task])(implicit sch: Scheduler): Task[Unit] = {
     val ex = new InvalidParameterException("BOOOOOM")
     for {
-      _ <- logger.withContext("yyy", A(567, "YYYYYYYYYYYY")) {
+      _ <- logger.withContext("a", A(1, "x")) {
         logger.withContext("o", o) {
           logger.info("Hello Monix")
         }
       }
       _ <- logger.info("Hello MTL", "o", o, ex)
       _ <- logger.withContext("x", 123, "o", o) {
-        logger.info("Hello2 meow")
+        logger.info("Hello2 meow", "x", 9)
       }
     } yield ()
   }
