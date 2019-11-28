@@ -12,6 +12,12 @@ This repo contains experiments with possible implementations of structured loggi
    * the context can be programmatically augmented
    * works in a stack-like manner, including shadowing
    * works well with `cats-effect` and related libraries (is not bound to `ThreadLocal`/fat JVM thread like slf4j's MDC)
+ * other useful metadata in logs
+   * timestamp
+   * file name
+   * line number
+   * loglevel as both string and number
+   * ... to be specified
 
 ## Implementation considerations
 
