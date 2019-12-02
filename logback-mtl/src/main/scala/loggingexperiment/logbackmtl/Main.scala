@@ -18,16 +18,32 @@ import scala.language.higherKinds
 final case class A(x: Int, y: String)
 final case class B(a: A, b: Boolean)
 
+trait KeySub {
+  def toString: String
+}
+
+trait KeyTC[A] {
+  def toString(a: A): String
+}
+
 trait Log[F[_]] {
   def info[A](message: String): F[Unit]
   def info[A](message: String, name: String, value: A)(
     implicit e: Encoder[A]
   ): F[Unit]
+  def info[A](message: String, name: KeySub, value: A)(
+    implicit e: Encoder[A]
+  ): F[Unit]
+  def info[A, K](message: String, name: K, value: A)(implicit e: Encoder[A],
+                                                     k: KeyTC[K]): F[Unit]
   def info[A](message: String, ex: Throwable): F[Unit]
   def info[A](message: String, name: String, value: A, ex: Throwable)(
     implicit e: Encoder[A]
   ): F[Unit]
   def withContext[A, B](name: String, value: A)(inner: F[B])(
+    implicit e: Encoder[A]
+  ): F[B]
+  def withContext[A, B](map: Map[String, A])(inner: F[B])(
     implicit e: Encoder[A]
   ): F[B]
   def withContext[A, B, C](name1: String, value1: A, name2: String, value2: B)(
@@ -55,6 +71,18 @@ object Log {
     )(implicit e: Encoder[A]): F[B] = {
       if (logger.isTraceEnabled || logger.isDebugEnabled || logger.isInfoEnabled || logger.isWarnEnabled || logger.isErrorEnabled) {
         FApplicativeLocal.local(_ + ((name, e(value).spaces2)))(inner)
+      } else {
+        inner
+      }
+    }
+
+    override def withContext[A, B](
+      map: Map[String, A]
+    )(inner: F[B])(implicit e: Encoder[A]): F[B] = {
+      if (logger.isTraceEnabled || logger.isDebugEnabled || logger.isInfoEnabled || logger.isWarnEnabled || logger.isErrorEnabled) {
+        FApplicativeLocal.local(map.foldLeft(_) {
+          case (m, (k, v)) => m + ((k, e(v).spaces2))
+        })(inner)
       } else {
         inner
       }
@@ -89,6 +117,33 @@ object Log {
     ): F[Unit] =
       if (logger.isInfoEnabled) {
         withContext(name, value) {
+          log { mdc =>
+            logger.info(mdc, message)
+          }
+        }
+      } else {
+        FSync.unit
+      }
+
+    override def info[A](message: String, name: KeySub, value: A)(
+      implicit e: Encoder[A]
+    ): F[Unit] =
+      if (logger.isInfoEnabled) {
+        withContext(name.toString, value) {
+          log { mdc =>
+            logger.info(mdc, message)
+          }
+        }
+      } else {
+        FSync.unit
+      }
+
+    override def info[A, K](message: String, name: K, value: A)(
+      implicit e: Encoder[A],
+      k: KeyTC[K]
+    ): F[Unit] =
+      if (logger.isInfoEnabled) {
+        withContext(k.toString(name), value) {
           log { mdc =>
             logger.info(mdc, message)
           }

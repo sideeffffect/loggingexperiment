@@ -18,6 +18,11 @@ This repo contains experiments with possible implementations of structured loggi
    * line number
    * loglevel as both string and number
    * ... to be specified
+ * JSON keys, possibilities:
+    * always as free-form strings -- simplest solution
+    * library of standardized JSON keys
+    * JSON keys via extendable type
+    * JSON keys via typeclass
 
 ## Implementation considerations
 
