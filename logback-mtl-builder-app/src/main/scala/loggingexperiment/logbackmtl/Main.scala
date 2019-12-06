@@ -1,0 +1,46 @@
+package loggingexperiment.logbackmtl
+
+import java.security.InvalidParameterException
+
+import cats.effect._
+import io.circe.generic.auto._
+import monix.eval._
+import monix.execution.Scheduler
+
+import scala.language.higherKinds
+
+object Main extends TaskApp {
+
+  final case class A(x: Int, y: String)
+  final case class B(a: A, b: Boolean)
+
+  private val o = B(A(123, "Hello"), b = true)
+
+  override def run(args: List[String]): Task[ExitCode] =
+    init(scheduler)
+      .map(_ => ExitCode.Success)
+      .executeWithOptions(_.enableLocalContextPropagation)
+
+  def init(implicit sch: Scheduler): Task[Unit] =
+    for {
+      mdc <- TaskLocal(Logger.Context.empty)
+      logger = MonixLog.make(mdc)
+      result <- program(logger)
+    } yield result
+
+  def program(logger: Logger[Task])(implicit sch: Scheduler): Task[Unit] = {
+    val ex = new InvalidParameterException("BOOOOOM")
+    for {
+      _ <- logger
+        .context("a", A(1, "x"))
+        .context("o", o)
+        .apply
+        .info("Hello Monix")
+      _ <- logger.apply.info("Hello MTL", ex)
+      _ <- logger.context("x", 123).context("o", o).use {
+        logger.context("x", 9).apply.info("Hello2 meow")
+      }
+    } yield ()
+  }
+
+}

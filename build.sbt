@@ -104,3 +104,26 @@ lazy val logbackMtl = project
       "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
     )
   )
+
+lazy val logbackMtlBuilder = project
+  .in(file("logback-mtl-builder"))
+  .settings(
+    name := "logback-mtl-builder",
+    libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % Version.slf4j,
+      "ch.qos.logback" % "logback-classic" % Version.logback,
+      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
+      "io.circe" %% "circe-core" % Version.circe,
+      "io.circe" %% "circe-generic" % Version.circe,
+      "io.monix" %% "monix" %  Version.monix,
+      "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
+      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
+    )
+  )
+
+lazy val logbackMtlBuilderApp = project
+  .in(file("logback-mtl-builder-app"))
+  .settings(
+    name := "logback-mtl-builder-app",
+  )
+  .dependsOn(logbackMtlBuilder)
