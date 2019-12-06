@@ -15,6 +15,7 @@ lazy val Version = new {
   val gson = "2.8.6"
   val jackson = "2.9.8"
   val catsMtl = "0.7.0"
+  val catsEffect = "2.0.0"
   val meowMtl = "0.4.0"
 }
 
@@ -115,9 +116,9 @@ lazy val logbackMtlBuilder = project
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
       "io.circe" %% "circe-core" % Version.circe,
       "io.circe" %% "circe-generic" % Version.circe,
-      "io.monix" %% "monix" %  Version.monix,
       "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
-      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
+      "org.typelevel" %% "cats-effect" % Version.catsEffect,
+      "org.scala-lang" % "scala-reflect" % scalaVersion.value,
     )
   )
 
@@ -125,5 +126,9 @@ lazy val logbackMtlBuilderApp = project
   .in(file("logback-mtl-builder-app"))
   .settings(
     name := "logback-mtl-builder-app",
+    libraryDependencies ++= Seq(
+      "io.monix" %% "monix" %  Version.monix,
+      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
+    )
   )
   .dependsOn(logbackMtlBuilder)
