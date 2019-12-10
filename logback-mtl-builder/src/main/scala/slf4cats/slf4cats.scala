@@ -12,12 +12,10 @@ import scala.language.higherKinds
 import scala.reflect.ClassTag
 
 trait Contexter[F[_]] {
-  import Contexter._
   type Self <: Contexter[F]
   def context[A](name: String, value: A)(implicit e: Encoder[A]): Self
   def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self
   def use[A](inner: F[A]): F[A]
-  def get: F[Context]
 }
 
 object Contexter {
@@ -36,7 +34,7 @@ object Contexter {
 
   private class ContexterImpl[F[_]](context: Map[String, (Encoder[Any], Any)])(
     implicit FApplicativeLocal: ApplicativeLocal[F, Context],
-    val FSync: Sync[F]
+    FSync: Sync[F]
   ) extends Contexter[F] {
     override type Self = Contexter[F]
 
@@ -57,8 +55,6 @@ object Contexter {
       FApplicativeLocal.local(_ ++ context.mapValues {
         case (e, v) => JsonInString.make(v)(e)
       })(inner)
-
-    override def get: F[Context] = FApplicativeLocal.ask
   }
 
   def make[F[_]](implicit FApplicativeLocal: ApplicativeLocal[F, Context],
@@ -68,67 +64,81 @@ object Contexter {
 
 }
 
-trait Logger[F[_]] extends Contexter[F] {
+trait Logger[F[_]] {
   type Self <: Logger[F]
+  def context[A](name: String, value: A)(implicit e: Encoder[A]): Self
+  def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self
   def info: LoggerInfo[F]
 }
 
 object Logger {
 
-  import Contexter._
-
   private class LoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
-    contexter: Contexter[F]
-  )(implicit FSync: Sync[F])
+    context: Map[String, (Encoder[Any], Any)]
+  )(implicit FSync: Sync[F],
+    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context])
       extends Logger[F] {
 
     override type Self = Logger[F]
 
     override def info: LoggerInfo[F] =
-      new LoggerInfo[F](this, underlying, contexter)
+      new LoggerInfo[F](underlying, context)
 
     override def context[A](name: String,
                             value: A)(implicit e: Encoder[A]): Logger[F] =
-      new LoggerImpl[F](underlying, contexter.context(name, value))
+      new LoggerImpl[F](
+        underlying,
+        context + ((name, (e.asInstanceOf[Encoder[Any]], value)))
+      )
 
     override def context[A](
       map: Map[String, A]
     )(implicit e: Encoder[A]): Logger[F] =
-      new LoggerImpl[F](underlying, contexter.context(map))
+      new LoggerImpl[F](
+        underlying,
+        context ++ map.mapValues(v => (e.asInstanceOf[Encoder[Any]], v))
+      )
 
-    override def use[A](inner: F[A]): F[A] = contexter.use(inner)
-
-    override def get: F[Context] = contexter.get
   }
 
-  def make[F[_]](logger: org.slf4j.Logger, contexter: Contexter[F])(
-    implicit FSync: Sync[F]
+  def make[F[_]](logger: org.slf4j.Logger)(
+    implicit FSync: Sync[F],
+    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
   ): Logger[F] = {
-    new LoggerImpl(logger, contexter)
+    new LoggerImpl(logger, Map.empty)
   }
 
-  def make[F[_]](name: String, contexter: Contexter[F])(
-    implicit FSync: Sync[F]
+  def make[F[_]](name: String)(
+    implicit FSync: Sync[F],
+    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
   ): Logger[F] = {
-    make(LoggerFactory.getLogger(name), contexter)
+    make(LoggerFactory.getLogger(name))
   }
 
-  def make[F[_], T](contexter: Contexter[F])(implicit classTag: ClassTag[T],
-                                             FSync: Sync[F]): Logger[F] = {
-    make(LoggerFactory.getLogger(classTag.runtimeClass), contexter)
+  def make[F[_], T](contexter: Contexter[F])(
+    implicit classTag: ClassTag[T],
+    FSync: Sync[F],
+    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
+  ): Logger[F] = {
+    make(LoggerFactory.getLogger(classTag.runtimeClass))
   }
 }
 
 sealed class LoggerCommand[F[_]] private[slf4cats] (
-  logger: Logger[F],
   underlying: org.slf4j.Logger,
-  contexter: Contexter[F]
+  context: Map[String, (Encoder[Any], Any)]
 )(implicit
-  FSync: Sync[F]) {
+  FSync: Sync[F],
+  FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]) {
 
-  protected val marker: F[Marker] = contexter.get.map { mdc =>
-    val markers = mdc.toList.map {
+  import Contexter._
+
+  protected val marker: F[Marker] = FApplicativeAsk.ask.map { mdc =>
+    val contextEncoded = context.mapValues {
+      case (e, v) => JsonInString.make(v)(e)
+    }
+    val markers = (mdc ++ contextEncoded).toList.map {
       case (k, v) =>
         Markers.appendRaw(k, v.raw)
     }
@@ -143,15 +153,76 @@ sealed class LoggerCommand[F[_]] private[slf4cats] (
     val (isEnabled, body) = macroCallback(FSync, underlying)
     isEnabled.flatMap { isEnabled =>
       if (isEnabled) {
-        logger.use {
-          marker.flatMap { marker =>
-            body(marker)
-          }
+        marker.flatMap { marker =>
+          body(marker)
         }
       } else {
         FSync.unit
       }
     }
+  }
+
+}
+
+trait ContextLogger[F[_]] extends Contexter[F] with Logger[F] {
+  type Self <: ContextLogger[F]
+}
+
+object ContextLogger {
+
+  import Contexter._
+
+  private class ContextLoggerImpl[F[_]](
+    underlying: org.slf4j.Logger,
+    context: Map[String, (Encoder[Any], Any)]
+  )(implicit FApplicativeLocal: ApplicativeLocal[F, Context], FSync: Sync[F])
+      extends ContextLogger[F] {
+
+    override type Self = ContextLogger[F]
+
+    override def info: LoggerInfo[F] =
+      new LoggerInfo[F](underlying, context)
+
+    override def context[A](name: String,
+                            value: A)(implicit e: Encoder[A]): Self =
+      new ContextLoggerImpl[F](
+        underlying,
+        context + ((name, (e.asInstanceOf[Encoder[Any]], value)))
+      )
+
+    override def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self =
+      new ContextLoggerImpl[F](
+        underlying,
+        context ++ map.mapValues(v => (e.asInstanceOf[Encoder[Any]], v))
+      )
+
+    override def use[A](inner: F[A]): F[A] =
+      FApplicativeLocal.local(_ ++ context.mapValues {
+        case (e, v) => JsonInString.make(v)(e)
+      })(inner)
+
+  }
+
+  def make[F[_]](logger: org.slf4j.Logger)(
+    implicit FSync: Sync[F],
+    FApplicativeLocal: ApplicativeLocal[F, Contexter.Context]
+  ): ContextLogger[F] = {
+    new ContextLoggerImpl[F](logger, Map.empty)
+  }
+
+  def make[F[_]](name: String)(
+    implicit FSync: Sync[F],
+    FApplicativeAsk: ApplicativeLocal[F, Contexter.Context]
+  ): ContextLogger[F] = {
+    make(LoggerFactory.getLogger(name))
+  }
+
+  def make[F[_], T](
+    implicit classTag: ClassTag[T],
+    FSync: Sync[F],
+    FApplicativeAsk: ApplicativeLocal[F, Contexter.Context]
+  ): ContextLogger[F] = {
+    make(LoggerFactory.getLogger(classTag.runtimeClass))
   }
 
 }
@@ -164,12 +235,12 @@ object LoggerCommand {
 }
 
 class LoggerInfo[F[_]] private[slf4cats] (
-  logger: Logger[F],
   underlying: org.slf4j.Logger,
-  contexter: Contexter[F]
+  context: Map[String, (Encoder[Any], Any)]
 )(implicit
-  FSync: Sync[F])
-    extends LoggerCommand(logger, underlying, contexter) {
+  FSync: Sync[F],
+  FApplicativeAsk: ApplicativeAsk[F, Contexter.Context])
+    extends LoggerCommand(underlying, context) {
   import scala.language.experimental.macros
   def apply(message: String): F[Unit] = macro LoggerInfo.Macros.info[F]
   def apply(message: String, throwable: Throwable): F[Unit] =
