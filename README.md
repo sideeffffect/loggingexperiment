@@ -32,15 +32,17 @@ This repo contains experiments with possible implementations of structured loggi
 ## Interface
 
 ```scala
-trait Logger[F[_]] {
+trait ContextLogger[F[_]] {
+  type Self <: ContextLogger[F]
+  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
+  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
+  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+  def use[A](inner: F[A]): F[A]
   // excerpt for `info` logging
   def info: LoggerInfo[F]
   //...
-  def context[A](name: String, value: A)(implicit e: Encoder[A]): Logger[F]
-  def context[A](map: Map[String, A])(implicit e: Encoder[A]): Logger[F]
-  def use[A](inner: F[A]): F[A]
 }
-class LoggerInfo[F[_]] (...) {
+class LoggerInfo[F[_]] (???) {
   def apply(message: String): F[Unit] = macro ???
   def apply(message: String, throwable: Throwable): F[Unit] = macro ???
 }
@@ -49,16 +51,16 @@ class LoggerInfo[F[_]] (...) {
 ## Usage
 
 ```scala
-def program(logger: Logger[Task])(implicit sch: Scheduler): Task[Unit] = {
+def program(logger: ContextLogger[Task]): Task[Unit] = {
   val ex = new InvalidParameterException("BOOOOOM")
   for {
     _ <- logger
-      .context("a", A(1, "x"))
-      .context("o", o)
+      .withArg("a", A(1, "x"))
+      .withArg("o", o)
       .info("Hello Monix")
     _ <- logger.info("Hello MTL", ex)
-    _ <- logger.context("x", 123).context("o", o).use {
-      logger.context("x", 9).info("Hello2 meow")
+    _ <- logger.withArg("x", 123).withArg("o", o).use {
+      logger.withArg("x", 9).info("Hello2 meow")
     }
   } yield ()
 }
@@ -67,17 +69,17 @@ def program(logger: Logger[Task])(implicit sch: Scheduler): Task[Unit] = {
 ### Multiple contexts
 ```scala
 _ <- logger
-  .context("a", A(1, "x"))
-  .context("o", o)
+  .withArg("a", A(1, "x"))
+  .withArg("o", o)
   .info("Hello Monix")
 ```
 ```json
 {
-  "@timestamp": "2019-12-06T23:20:55.237+01:00",
+  "@timestamp": "2019-12-11T19:52:54.619+01:00",
   "@version": "1",
   "message": "Hello Monix",
   "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-11",
+  "thread_name": "scala-execution-context-global-13",
   "level": "INFO",
   "level_value": 20000,
   "a": {
@@ -93,9 +95,9 @@ _ <- logger
   },
   "application": "loggingexperiment",
   "caller_class_name": "loggingexperiment.logbackmtl.Main$",
-  "caller_method_name": "$anonfun$program$6",
+  "caller_method_name": "$anonfun$program$7",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 66
+  "caller_line_number": 65
 }
 ```
 
@@ -105,35 +107,35 @@ _ <- logger.info("Hello MTL", ex)
 ```
 ```json
 {
-  "@timestamp": "2019-12-06T23:20:55.254+01:00",
+  "@timestamp": "2019-12-11T19:52:54.631+01:00",
   "@version": "1",
   "message": "Hello MTL",
   "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-11",
+  "thread_name": "scala-execution-context-global-13",
   "level": "INFO",
   "level_value": 20000,
-  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat loggingexperiment.logbackmtl.Main$.program(Main.scala:61)\n...",
+  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat loggingexperiment.logbackmtl.Main$.program(Main.scala:60)\n...",
   "application": "loggingexperiment",
   "caller_class_name": "loggingexperiment.logbackmtl.Main$",
   "caller_method_name": "$anonfun$program$11",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 67
+  "caller_line_number": 66
 }
 ```
 
 ### Context overriding
 ```scala
-_ <- logger.context("x", 123).context("o", o).use {
-  logger.context("x", 9).info("Hello2 meow")
+_ <- logger.withArg("x", 123).withArg("o", o).use {
+  logger.withArg("x", 9).info("Hello2 meow")
 }
 ```
 ```json
 {
-  "@timestamp": "2019-12-06T23:20:55.263+01:00",
+  "@timestamp": "2019-12-11T19:52:54.645+01:00",
   "@version": "1",
   "message": "Hello2 meow",
   "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-11",
+  "thread_name": "scala-execution-context-global-13",
   "level": "INFO",
   "level_value": 20000,
   "x": 9,
@@ -146,8 +148,8 @@ _ <- logger.context("x", 123).context("o", o).use {
   },
   "application": "loggingexperiment",
   "caller_class_name": "loggingexperiment.logbackmtl.Main$",
-  "caller_method_name": "$anonfun$program$17",
+  "caller_method_name": "$anonfun$program$19",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 69
+  "caller_line_number": 68
 }
 ```
