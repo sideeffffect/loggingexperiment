@@ -15,25 +15,25 @@ import scala.reflect.ClassTag
 object MonixLog {
   def make(
     logger: org.slf4j.Logger
-  )(taskLocalContext: TaskLocal[Logger.Context]): Logger[Task] = {
+  )(taskLocalContext: TaskLocal[Contexter.Context]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      Logger.make(logger)
+      ContextLogger.make(logger)
     }
   }
 
   def make(
     name: String
-  )(taskLocalContext: TaskLocal[Logger.Context]): Logger[Task] = {
+  )(taskLocalContext: TaskLocal[Contexter.Context]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      Logger.make(name)
+      ContextLogger.make(name)
     }
   }
 
   def make[T](
-    taskLocalContext: TaskLocal[Logger.Context]
-  )(implicit classTag: ClassTag[T]): Logger[Task] = {
+    taskLocalContext: TaskLocal[Contexter.Context]
+  )(implicit classTag: ClassTag[T]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      Logger.make
+      ContextLogger.make
     }
   }
 }
@@ -53,12 +53,14 @@ object Main extends TaskApp {
 
   def init(implicit sch: Scheduler): Task[Unit] =
     for {
-      mdc <- TaskLocal(Logger.Context.empty)
+      mdc <- TaskLocal(Contexter.Context.empty)
       logger = MonixLog.make[Main.type](mdc)
       result <- program(logger)
     } yield result
 
-  def program(logger: Logger[Task])(implicit sch: Scheduler): Task[Unit] = {
+  def program(
+    logger: ContextLogger[Task]
+  )(implicit sch: Scheduler): Task[Unit] = {
     val ex = new InvalidParameterException("BOOOOOM")
     for {
       _ <- logger
