@@ -1,73 +1,105 @@
 package slf4cats
 
+import cats._
 import cats.effect._
 import cats.implicits._
 import cats.mtl._
 import io.circe.Encoder
-import io.circe.generic.auto._
 import net.logstash.logback.marker.Markers
 import org.slf4j.{LoggerFactory, Marker}
 
 import scala.language.higherKinds
 import scala.reflect.ClassTag
 
-trait Contexter[F[_]] {
-  type Self <: Contexter[F]
-  def context[A](name: String, value: A)(implicit e: Encoder[A]): Self
-  def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+trait ContextManager[F[_]] {
+  type Self <: ContextManager[F]
+  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
+  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
+  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
   def use[A](inner: F[A]): F[A]
 }
 
-object Contexter {
+object ContextManager {
 
-  class JsonInString private (private[slf4cats] val raw: String) extends AnyVal
-  object JsonInString {
+  private[slf4cats] class JsonInString private (
+    private[slf4cats] val raw: String
+  ) extends AnyVal
+
+  private[slf4cats] object JsonInString {
     def make[A](x: A)(implicit e: Encoder[A]): JsonInString = {
       new JsonInString(e(x).spaces2)
     }
   }
 
-  type Context = Map[String, JsonInString]
+  type Context[F[_]] = Map[String, F[JsonInString]]
   object Context {
-    def empty: Context = Map.empty
+    def empty[F[_]]: Context[F] = Map.empty
   }
 
-  private class ContexterImpl[F[_]](context: Map[String, (Encoder[Any], Any)])(
-    implicit FApplicativeLocal: ApplicativeLocal[F, Context],
-    FSync: Sync[F]
-  ) extends Contexter[F] {
-    override type Self = Contexter[F]
+  private class ContextManagerImpl[F[_]](
+    tmpContext: Map[String, F[F[JsonInString]]]
+  )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
+    FAsync: Async[F])
+      extends ContextManager[F] {
 
-    override def context[A](name: String,
-                            value: A)(implicit e: Encoder[A]): Contexter[F] =
-      new ContexterImpl[F](
-        context + ((name, (e.asInstanceOf[Encoder[Any]], value)))
-      )
+    override type Self = ContextManager[F]
 
-    override def context[A](
+    override def withArg[A](name: String, value: => A)(
+      implicit e: Encoder[A]
+    ): ContextManager[F] =
+      withComputed(name, FAsync.delay {
+        value
+      })
+
+    override def withComputed[A](name: String, value: F[A])(
+      implicit e: Encoder[A]
+    ): ContextManager[F] = {
+      val memoizedJson = Async.memoize(value.map(JsonInString.make(_)))
+      new ContextManagerImpl[F](tmpContext + ((name, memoizedJson)))
+    }
+
+    override def withArgs[A](
       map: Map[String, A]
-    )(implicit e: Encoder[A]): Contexter[F] =
-      new ContexterImpl[F](
-        context ++ map.mapValues((e.asInstanceOf[Encoder[Any]], _))
+    )(implicit e: Encoder[A]): ContextManager[F] =
+      new ContextManagerImpl[F](
+        tmpContext ++ map
+          .mapValues(v => FAsync.pure(FAsync.delay { JsonInString.make(v) }))
       )
 
-    override def use[A](inner: F[A]): F[A] =
-      FApplicativeLocal.local(_ ++ context.mapValues {
-        case (e, v) => JsonInString.make(v)(e)
-      })(inner)
+    override def use[A](inner: F[A]): F[A] = {
+      val contextMemoized = tmpContext.toList
+        .traverse(p => p._2.map((p._1, _)))
+        .map(_.toMap)
+      contextMemoized.flatMap { contextMemoized =>
+        FApplicativeLocal.local(_ ++ contextMemoized)(inner)
+      }
+    }
   }
 
-  def make[F[_]](implicit FApplicativeLocal: ApplicativeLocal[F, Context],
-                 FSync: Sync[F]): Contexter[F] = {
-    new ContexterImpl(Map())
+  private[slf4cats] def mapSequence[F[_], K, V](
+    m: Map[K, F[V]]
+  )(implicit FApplicative: Applicative[F]): F[Map[K, V]] = {
+    m.foldLeft(FApplicative.pure(Map.empty[K, V])) {
+      case (m, (k, fv)) =>
+        FApplicative.tuple2(m, fv).map {
+          case (m, v) =>
+            m + ((k, v))
+        }
+    }
+  }
+
+  def make[F[_]](implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
+                 FAsync: Async[F]): ContextManager[F] = {
+    new ContextManagerImpl(Map())
   }
 
 }
 
 trait Logger[F[_]] {
   type Self <: Logger[F]
-  def context[A](name: String, value: A)(implicit e: Encoder[A]): Self
-  def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
+  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
+  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
   def info: LoggerInfo[F]
 }
 
@@ -75,82 +107,89 @@ object Logger {
 
   private class LoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
-    context: Map[String, (Encoder[Any], Any)]
+    context: ContextManager.Context[F]
   )(implicit FSync: Sync[F],
-    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context])
+    FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]])
       extends Logger[F] {
 
     override type Self = Logger[F]
 
     override def info: LoggerInfo[F] =
-      new LoggerInfo[F](underlying, context)
+      new LoggerInfo[F](underlying, context.mapValues(FSync.pure))
 
-    override def context[A](name: String,
-                            value: A)(implicit e: Encoder[A]): Logger[F] =
-      new LoggerImpl[F](
-        underlying,
-        context + ((name, (e.asInstanceOf[Encoder[Any]], value)))
-      )
+    override def withArg[A](name: String, value: => A)(
+      implicit e: Encoder[A]
+    ): Logger[F] = withComputed(name, FSync.delay { value })
 
-    override def context[A](
+    override def withComputed[A](name: String, value: F[A])(
+      implicit e: Encoder[A]
+    ): Logger[F] = {
+      val json = value.map(ContextManager.JsonInString.make(_))
+      new LoggerImpl[F](underlying, context + ((name, json)))
+    }
+
+    override def withArgs[A](
       map: Map[String, A]
     )(implicit e: Encoder[A]): Logger[F] =
       new LoggerImpl[F](
         underlying,
-        context ++ map.mapValues(v => (e.asInstanceOf[Encoder[Any]], v))
+        context ++ map
+          .mapValues(v => FSync.delay { ContextManager.JsonInString.make(v) })
       )
 
   }
 
   def make[F[_]](logger: org.slf4j.Logger)(
-    implicit FSync: Sync[F],
-    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
+    implicit FAsync: Async[F],
+    FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]]
   ): Logger[F] = {
     new LoggerImpl(logger, Map.empty)
   }
 
   def make[F[_]](name: String)(
-    implicit FSync: Sync[F],
-    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
+    implicit FAsync: Async[F],
+    FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]]
   ): Logger[F] = {
     make(LoggerFactory.getLogger(name))
   }
 
-  def make[F[_], T](contexter: Contexter[F])(
+  def make[F[_], T](
     implicit classTag: ClassTag[T],
-    FSync: Sync[F],
-    FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]
+    FAsync: Async[F],
+    FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]]
   ): Logger[F] = {
     make(LoggerFactory.getLogger(classTag.runtimeClass))
   }
 }
 
-sealed class LoggerCommand[F[_]] private[slf4cats] (
+sealed abstract class LoggerCommand[F[_]] private[slf4cats] (
   underlying: org.slf4j.Logger,
-  context: Map[String, (Encoder[Any], Any)]
+  tmpContext: Map[String, F[F[ContextManager.JsonInString]]]
 )(implicit
   FSync: Sync[F],
-  FApplicativeAsk: ApplicativeAsk[F, Contexter.Context]) {
+  FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]]) {
 
-  import Contexter._
+  import ContextManager._
 
-  protected val marker: F[Marker] = FApplicativeAsk.ask.map { mdc =>
-    val contextEncoded = context.mapValues {
-      case (e, v) => JsonInString.make(v)(e)
-    }
-    val markers = (mdc ++ contextEncoded).toList.map {
+  protected val marker: F[Marker] = for {
+    context1 <- FApplicativeAsk.ask
+    context2 <- mapSequence(tmpContext)
+    union <- mapSequence(context1 ++ context2)
+    markers = union.toList.map {
       case (k, v) =>
         Markers.appendRaw(k, v.raw)
     }
-    Markers.aggregate(markers: _*)
-  }
+    result = Markers.aggregate(markers: _*)
+  } yield result
+
+  protected def isEnabled
+    : F[Boolean] // could be made public if there's interest
 
   /** only to be used used by macro */
   def withUnderlying(
-    macroCallback: (Sync[F], org.slf4j.Logger) => (F[Boolean],
-                                                   Marker => F[Unit])
+    macroCallback: (Sync[F], org.slf4j.Logger) => (Marker => F[Unit])
   ): F[Unit] = {
-    val (isEnabled, body) = macroCallback(FSync, underlying)
+    val body = macroCallback(FSync, underlying)
     isEnabled.flatMap { isEnabled =>
       if (isEnabled) {
         marker.flatMap { marker =>
@@ -164,18 +203,19 @@ sealed class LoggerCommand[F[_]] private[slf4cats] (
 
 }
 
-trait ContextLogger[F[_]] extends Contexter[F] with Logger[F] {
+trait ContextLogger[F[_]] extends ContextManager[F] with Logger[F] {
   type Self <: ContextLogger[F]
 }
 
 object ContextLogger {
 
-  import Contexter._
+  import ContextManager._
 
   private class ContextLoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
-    context: Map[String, (Encoder[Any], Any)]
-  )(implicit FApplicativeLocal: ApplicativeLocal[F, Context], FSync: Sync[F])
+    context: Map[String, F[F[JsonInString]]]
+  )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
+    FAsync: Async[F])
       extends ContextLogger[F] {
 
     override type Self = ContextLogger[F]
@@ -183,44 +223,57 @@ object ContextLogger {
     override def info: LoggerInfo[F] =
       new LoggerInfo[F](underlying, context)
 
-    override def context[A](name: String,
-                            value: A)(implicit e: Encoder[A]): Self =
+    override def withArg[A](name: String, value: => A)(
+      implicit e: Encoder[A]
+    ): ContextLogger[F] =
+      withComputed(name, FAsync.delay {
+        value
+      })
+
+    override def withComputed[A](name: String, value: F[A])(
+      implicit e: Encoder[A]
+    ): ContextLogger[F] = {
+      val memoizedJson = Async.memoize(value.map(JsonInString.make(_)))
+      new ContextLoggerImpl[F](underlying, context + ((name, memoizedJson)))
+    }
+
+    override def withArgs[A](
+      map: Map[String, A]
+    )(implicit e: Encoder[A]): ContextLogger[F] =
       new ContextLoggerImpl[F](
         underlying,
-        context + ((name, (e.asInstanceOf[Encoder[Any]], value)))
+        context ++ map
+          .mapValues(
+            v =>
+              FAsync.pure(FAsync.delay { ContextManager.JsonInString.make(v) })
+          )
       )
 
-    override def context[A](map: Map[String, A])(implicit e: Encoder[A]): Self =
-      new ContextLoggerImpl[F](
-        underlying,
-        context ++ map.mapValues(v => (e.asInstanceOf[Encoder[Any]], v))
-      )
-
-    override def use[A](inner: F[A]): F[A] =
-      FApplicativeLocal.local(_ ++ context.mapValues {
-        case (e, v) => JsonInString.make(v)(e)
-      })(inner)
-
+    override def use[A](inner: F[A]): F[A] = {
+      mapSequence(context).flatMap { contextMemoized =>
+        FApplicativeLocal.local(_ ++ contextMemoized)(inner)
+      }
+    }
   }
 
   def make[F[_]](logger: org.slf4j.Logger)(
-    implicit FSync: Sync[F],
-    FApplicativeLocal: ApplicativeLocal[F, Contexter.Context]
+    implicit FAsync: Async[F],
+    FApplicativeLocal: ApplicativeLocal[F, ContextManager.Context[F]]
   ): ContextLogger[F] = {
     new ContextLoggerImpl[F](logger, Map.empty)
   }
 
   def make[F[_]](name: String)(
-    implicit FSync: Sync[F],
-    FApplicativeAsk: ApplicativeLocal[F, Contexter.Context]
+    implicit FAsync: Async[F],
+    FApplicativeAsk: ApplicativeLocal[F, ContextManager.Context[F]]
   ): ContextLogger[F] = {
     make(LoggerFactory.getLogger(name))
   }
 
   def make[F[_], T](
     implicit classTag: ClassTag[T],
-    FSync: Sync[F],
-    FApplicativeAsk: ApplicativeLocal[F, Contexter.Context]
+    FAsync: Async[F],
+    FApplicativeAsk: ApplicativeLocal[F, ContextManager.Context[F]]
   ): ContextLogger[F] = {
     make(LoggerFactory.getLogger(classTag.runtimeClass))
   }
@@ -236,12 +289,18 @@ object LoggerCommand {
 
 class LoggerInfo[F[_]] private[slf4cats] (
   underlying: org.slf4j.Logger,
-  context: Map[String, (Encoder[Any], Any)]
+  tmpContext: Map[String, F[F[ContextManager.JsonInString]]]
 )(implicit
   FSync: Sync[F],
-  FApplicativeAsk: ApplicativeAsk[F, Contexter.Context])
-    extends LoggerCommand(underlying, context) {
+  FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]])
+    extends LoggerCommand(underlying, tmpContext) {
+
   import scala.language.experimental.macros
+
+  override protected val isEnabled: F[Boolean] = FSync.delay {
+    underlying.isInfoEnabled
+  }
+
   def apply(message: String): F[Unit] = macro LoggerInfo.Macros.info[F]
   def apply(message: String, throwable: Throwable): F[Unit] =
     macro LoggerInfo.Macros.infoThrowable[F]
@@ -255,7 +314,7 @@ object LoggerInfo {
     def info[F[_]](c: Context[F])(message: c.Expr[String]): c.Expr[F[Unit]] = {
       import c.universe._
       val tree =
-        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (fsync.delay { underlying.isInfoEnabled }, marker => fsync.delay { underlying.info(marker, $message) }) }"
+        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.info(marker, $message) }) }"
       c.Expr[F[Unit]](tree)
     }
 
@@ -265,7 +324,7 @@ object LoggerInfo {
     ): c.Expr[F[Unit]] = {
       import c.universe._
       val tree =
-        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (fsync.delay { underlying.isInfoEnabled }, marker => fsync.delay { underlying.info(marker, $message, $throwable) }) }"
+        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.info(marker, $message, $throwable) }) }"
       c.Expr[F[Unit]](tree)
     }
   }
