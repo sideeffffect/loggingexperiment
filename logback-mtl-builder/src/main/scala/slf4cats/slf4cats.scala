@@ -37,7 +37,7 @@ object ContextManager {
   }
 
   private class ContextManagerImpl[F[_]](
-    tmpContext: Map[String, F[F[JsonInString]]]
+    localContext: Map[String, F[F[JsonInString]]]
   )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
     FAsync: Async[F])
       extends ContextManager[F] {
@@ -55,22 +55,19 @@ object ContextManager {
       implicit e: Encoder[A]
     ): ContextManager[F] = {
       val memoizedJson = Async.memoize(value.map(JsonInString.make(_)))
-      new ContextManagerImpl[F](tmpContext + ((name, memoizedJson)))
+      new ContextManagerImpl[F](localContext + ((name, memoizedJson)))
     }
 
     override def withArgs[A](
       map: Map[String, A]
     )(implicit e: Encoder[A]): ContextManager[F] =
       new ContextManagerImpl[F](
-        tmpContext ++ map
-          .mapValues(v => FAsync.pure(FAsync.delay { JsonInString.make(v) }))
+        localContext ++ map
+          .mapValues(v => Async.memoize(FAsync.delay { JsonInString.make(v) }))
       )
 
     override def use[A](inner: F[A]): F[A] = {
-      val contextMemoized = tmpContext.toList
-        .traverse(p => p._2.map((p._1, _)))
-        .map(_.toMap)
-      contextMemoized.flatMap { contextMemoized =>
+      mapSequence(localContext).flatMap { contextMemoized =>
         FApplicativeLocal.local(_ ++ contextMemoized)(inner)
       }
     }
@@ -107,7 +104,7 @@ object Logger {
 
   private class LoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
-    context: ContextManager.Context[F]
+    localContext: ContextManager.Context[F]
   )(implicit FSync: Sync[F],
     FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]])
       extends Logger[F] {
@@ -115,7 +112,7 @@ object Logger {
     override type Self = Logger[F]
 
     override def info: LoggerInfo[F] =
-      new LoggerInfo[F](underlying, context.mapValues(FSync.pure))
+      new LoggerInfo[F](underlying, localContext.mapValues(FSync.pure))
 
     override def withArg[A](name: String, value: => A)(
       implicit e: Encoder[A]
@@ -125,7 +122,7 @@ object Logger {
       implicit e: Encoder[A]
     ): Logger[F] = {
       val json = value.map(ContextManager.JsonInString.make(_))
-      new LoggerImpl[F](underlying, context + ((name, json)))
+      new LoggerImpl[F](underlying, localContext + ((name, json)))
     }
 
     override def withArgs[A](
@@ -133,7 +130,7 @@ object Logger {
     )(implicit e: Encoder[A]): Logger[F] =
       new LoggerImpl[F](
         underlying,
-        context ++ map
+        localContext ++ map
           .mapValues(v => FSync.delay { ContextManager.JsonInString.make(v) })
       )
 
@@ -164,7 +161,7 @@ object Logger {
 
 sealed abstract class LoggerCommand[F[_]] private[slf4cats] (
   underlying: org.slf4j.Logger,
-  tmpContext: Map[String, F[F[ContextManager.JsonInString]]]
+  localContext: Map[String, F[F[ContextManager.JsonInString]]]
 )(implicit
   FSync: Sync[F],
   FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]]) {
@@ -173,7 +170,7 @@ sealed abstract class LoggerCommand[F[_]] private[slf4cats] (
 
   protected val marker: F[Marker] = for {
     context1 <- FApplicativeAsk.ask
-    context2 <- mapSequence(tmpContext)
+    context2 <- mapSequence(localContext)
     union <- mapSequence(context1 ++ context2)
     markers = union.toList.map {
       case (k, v) =>
@@ -245,7 +242,9 @@ object ContextLogger {
         context ++ map
           .mapValues(
             v =>
-              FAsync.pure(FAsync.delay { ContextManager.JsonInString.make(v) })
+              Async.memoize(
+                FAsync.delay { ContextManager.JsonInString.make(v) }
+            )
           )
       )
 
