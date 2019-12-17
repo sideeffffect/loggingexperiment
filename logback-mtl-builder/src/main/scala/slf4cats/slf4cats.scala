@@ -283,6 +283,25 @@ object LoggerCommand {
   private[slf4cats] object Macros {
     import scala.reflect.macros.blackbox
     type Context[F[_]] = blackbox.Context { type PrefixType = LoggerCommand[F] }
+
+    def log[F[_]](c: Context[F])(level: c.TermName,
+                                 message: c.Expr[String]): c.Expr[F[Unit]] = {
+      import c.universe._
+      val tree =
+        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.$level(marker, $message) }) }"
+      c.Expr[F[Unit]](tree)
+    }
+
+    def logThrowable[F[_]](c: Context[F])(
+      level: c.TermName,
+      message: c.Expr[String],
+      throwable: c.Expr[Throwable]
+    ): c.Expr[F[Unit]] = {
+      import c.universe._
+      val tree =
+        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.$level(marker, $message, $throwable) }) }"
+      c.Expr[F[Unit]](tree)
+    }
   }
 }
 
@@ -310,22 +329,13 @@ object LoggerInfo {
   private[LoggerInfo] object Macros {
     import LoggerCommand.Macros._
 
-    def info[F[_]](c: Context[F])(message: c.Expr[String]): c.Expr[F[Unit]] = {
-      import c.universe._
-      val tree =
-        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.info(marker, $message) }) }"
-      c.Expr[F[Unit]](tree)
-    }
+    def info[F[_]](c: Context[F])(message: c.Expr[String]): c.Expr[F[Unit]] =
+      log(c)(c.universe.TermName("info"), message)
 
-    def infoThrowable[F[_]](c: Context[F])(
-      message: c.Expr[String],
-      throwable: c.Expr[Throwable]
-    ): c.Expr[F[Unit]] = {
-      import c.universe._
-      val tree =
-        q"${c.prefix}.withUnderlying { case (fsync, underlying) => (marker => fsync.delay { underlying.info(marker, $message, $throwable) }) }"
-      c.Expr[F[Unit]](tree)
-    }
+    def infoThrowable[F[_]](
+      c: Context[F]
+    )(message: c.Expr[String], throwable: c.Expr[Throwable]): c.Expr[F[Unit]] =
+      logThrowable(c)(c.universe.TermName("info"), message, throwable)
   }
 
 }
