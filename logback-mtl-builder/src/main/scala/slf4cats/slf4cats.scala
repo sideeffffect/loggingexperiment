@@ -4,7 +4,9 @@ import cats._
 import cats.effect._
 import cats.implicits._
 import cats.mtl._
-import io.circe.Encoder
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.PropertyAccessor
+import com.fasterxml.jackson.databind.ObjectMapper
 import net.logstash.logback.marker.Markers
 import org.slf4j.{LoggerFactory, Marker}
 
@@ -13,9 +15,9 @@ import scala.reflect.ClassTag
 
 trait ContextManager[F[_]] {
   type Self <: ContextManager[F]
-  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
-  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
-  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+  def withArg(name: String, value: => Any): Self
+  def withComputed(name: String, value: F[Any]): Self
+  def withArgs(map: Map[String, Any]): Self
   def use[A](inner: F[A]): F[A]
 }
 
@@ -26,8 +28,13 @@ object ContextManager {
   ) extends AnyVal
 
   private[slf4cats] object JsonInString {
-    def make[A](x: A)(implicit e: Encoder[A]): JsonInString = {
-      new JsonInString(e(x).spaces2)
+
+    private val jackson = new ObjectMapper()
+    jackson.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
+    jackson.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+
+    def make(x: Any): JsonInString = {
+      new JsonInString(jackson.writeValueAsString(x))
     }
   }
 
@@ -44,23 +51,18 @@ object ContextManager {
 
     override type Self = ContextManager[F]
 
-    override def withArg[A](name: String, value: => A)(
-      implicit e: Encoder[A]
-    ): ContextManager[F] =
+    override def withArg(name: String, value: => Any): ContextManager[F] =
       withComputed(name, FAsync.delay {
         value
       })
 
-    override def withComputed[A](name: String, value: F[A])(
-      implicit e: Encoder[A]
-    ): ContextManager[F] = {
-      val memoizedJson = Async.memoize(value.map(JsonInString.make(_)))
+    override def withComputed(name: String,
+                              value: F[Any]): ContextManager[F] = {
+      val memoizedJson = Async.memoize(value.map(JsonInString.make))
       new ContextManagerImpl[F](localContext + ((name, memoizedJson)))
     }
 
-    override def withArgs[A](
-      map: Map[String, A]
-    )(implicit e: Encoder[A]): ContextManager[F] =
+    override def withArgs(map: Map[String, Any]): ContextManager[F] =
       new ContextManagerImpl[F](
         localContext ++ map
           .mapValues(v => Async.memoize(FAsync.delay { JsonInString.make(v) }))
@@ -94,9 +96,9 @@ object ContextManager {
 
 trait Logger[F[_]] {
   type Self <: Logger[F]
-  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
-  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
-  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+  def withArg(name: String, value: => Any): Self
+  def withComputed(name: String, value: F[Any]): Self
+  def withArgs(map: Map[String, Any]): Self
   def info: LoggerInfo[F]
 }
 
@@ -114,20 +116,15 @@ object Logger {
     override def info: LoggerInfo[F] =
       new LoggerInfo[F](underlying, localContext.mapValues(FSync.pure))
 
-    override def withArg[A](name: String, value: => A)(
-      implicit e: Encoder[A]
-    ): Logger[F] = withComputed(name, FSync.delay { value })
+    override def withArg(name: String, value: => Any): Logger[F] =
+      withComputed(name, FSync.delay { value })
 
-    override def withComputed[A](name: String, value: F[A])(
-      implicit e: Encoder[A]
-    ): Logger[F] = {
-      val json = value.map(ContextManager.JsonInString.make(_))
+    override def withComputed(name: String, value: F[Any]): Logger[F] = {
+      val json = value.map(ContextManager.JsonInString.make)
       new LoggerImpl[F](underlying, localContext + ((name, json)))
     }
 
-    override def withArgs[A](
-      map: Map[String, A]
-    )(implicit e: Encoder[A]): Logger[F] =
+    override def withArgs(map: Map[String, Any]): Logger[F] =
       new LoggerImpl[F](
         underlying,
         localContext ++ map
@@ -220,23 +217,17 @@ object ContextLogger {
     override def info: LoggerInfo[F] =
       new LoggerInfo[F](underlying, context)
 
-    override def withArg[A](name: String, value: => A)(
-      implicit e: Encoder[A]
-    ): ContextLogger[F] =
+    override def withArg(name: String, value: => Any): ContextLogger[F] =
       withComputed(name, FAsync.delay {
         value
       })
 
-    override def withComputed[A](name: String, value: F[A])(
-      implicit e: Encoder[A]
-    ): ContextLogger[F] = {
-      val memoizedJson = Async.memoize(value.map(JsonInString.make(_)))
+    override def withComputed(name: String, value: F[Any]): ContextLogger[F] = {
+      val memoizedJson = Async.memoize(value.map(JsonInString.make))
       new ContextLoggerImpl[F](underlying, context + ((name, memoizedJson)))
     }
 
-    override def withArgs[A](
-      map: Map[String, A]
-    )(implicit e: Encoder[A]): ContextLogger[F] =
+    override def withArgs(map: Map[String, Any]): ContextLogger[F] =
       new ContextLoggerImpl[F](
         underlying,
         context ++ map

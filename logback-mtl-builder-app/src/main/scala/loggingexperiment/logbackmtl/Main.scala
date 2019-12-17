@@ -4,7 +4,6 @@ import java.security.InvalidParameterException
 
 import cats.effect._
 import com.olegpy.meow.monix._
-import io.circe.generic.auto._
 import monix.eval._
 import slf4cats._
 
