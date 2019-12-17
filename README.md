@@ -18,16 +18,13 @@ This repo contains experiments with possible implementations of structured loggi
    * line number
    * loglevel as both string and number
    * ... to be specified
- * JSON keys, possibilities:
-    * always as free-form strings -- simplest solution
-    * library of standardized JSON keys
-    * JSON keys via extendable type
-    * JSON keys via typeclass
+ * JSON keys will be just strings, at lest for the beginning
 
 ## Implementation considerations
 
  * use Circe for the encoding
- * mimic `slf4j`'s `Logger` API
+ * mimic `slf4j`'s `Logger` API/capabilities
+    * always as free-form strings -- simplest solution
 
 ## Interface
 
