@@ -5,7 +5,6 @@ version := "0.1"
 scalaVersion := "2.12.10"
 
 lazy val Version = new {
-  val circe = "0.11.1"
   val slf4j = "1.7.29"
   val logback = "1.2.3"
   val logstashLogback = "6.2"
@@ -34,8 +33,6 @@ lazy val logbackMtlBuilder = project
       "org.slf4j" % "slf4j-api" % Version.slf4j,
       "ch.qos.logback" % "logback-classic" % Version.logback,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
-      "io.circe" %% "circe-core" % Version.circe,
-      "io.circe" %% "circe-generic" % Version.circe,
       "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
