@@ -14,7 +14,7 @@ object MonixLog {
     taskLocalContext: TaskLocal[ContextManager.Context[Task]]
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.make(logger)
+      ContextLogger.fromLogger(logger)
     }
   }
 
@@ -22,7 +22,7 @@ object MonixLog {
     taskLocalContext: TaskLocal[ContextManager.Context[Task]]
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.make(name)
+      ContextLogger.fromName(name)
     }
   }
 
@@ -30,7 +30,7 @@ object MonixLog {
     taskLocalContext: TaskLocal[ContextManager.Context[Task]]
   )(implicit classTag: ClassTag[T]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.make
+      ContextLogger.fromClass()
     }
   }
 }
