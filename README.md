@@ -58,7 +58,7 @@ trait Logger[F[_]] {
 trait ContextLogger[F[_]] extends ContextManager[F] with Logger[F] {
   type Self <: ContextLogger[F]
 }
-class LoggerInfo[F[_]] (???) {
+class LoggerInfo[F[_]]() {
   def apply(message: String): F[Unit] = macro ???
   def apply(message: String, throwable: Throwable): F[Unit] = macro ???
 }
