@@ -16,9 +16,13 @@ import scala.reflect.ClassTag
 
 trait ContextManager[F[_]] {
   type Self <: ContextManager[F]
-  def withArg(name: String, value: => Any): Self
-  def withComputed(name: String, value: F[Any]): Self
-  def withArgs(map: Map[String, Any]): Self
+  def withArg[A](name: String,
+                 value: => A,
+                 toJson: Option[A => String] = None): Self
+  def withComputed[A](name: String,
+                      value: F[A],
+                      toJson: Option[A => String] = None): Self
+  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
   def use[A](inner: F[A]): F[A]
 }
 
@@ -38,9 +42,9 @@ object ContextManager {
         jackson.writeValueAsString(x)
     }
 
-    private[slf4cats] def make[F[_]](
-      toJson: Any => String
-    )(x: Any)(implicit F: Sync[F]): F[JsonInString] = {
+    private[slf4cats] def make[F[_], A](
+      toJson: A => String
+    )(x: A)(implicit F: Sync[F]): F[JsonInString] = {
       F.delay { new JsonInString(toJson(x)) }
     }
   }
@@ -52,30 +56,49 @@ object ContextManager {
 
   private class ContextManagerImpl[F[_]](
     localContext: Map[String, F[F[JsonInString]]],
-    toJson: Any => String,
+    toJsonGlobal: Any => String,
   )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
     FAsync: Async[F])
       extends ContextManager[F] {
 
     override type Self = ContextManager[F]
 
-    override def withArg(name: String, value: => Any): ContextManager[F] =
+    override def withArg[A](
+      name: String,
+      value: => A,
+      toJson: Option[A => String] = None
+    ): ContextManager[F] =
       withComputed(name, FAsync.delay {
         value
       })
 
-    override def withComputed(name: String,
-                              value: F[Any]): ContextManager[F] = {
+    override def withComputed[A](
+      name: String,
+      value: F[A],
+      toJson: Option[A => String] = None
+    ): ContextManager[F] = {
       val memoizedJson =
-        Async.memoize(value.flatMap(JsonInString.make(toJson)(_)))
-      new ContextManagerImpl[F](localContext + ((name, memoizedJson)), toJson)
+        Async.memoize(
+          value.flatMap(JsonInString.make(toJson.getOrElse(toJsonGlobal))(_))
+        )
+      new ContextManagerImpl[F](
+        localContext + ((name, memoizedJson)),
+        toJsonGlobal
+      )
     }
 
-    override def withArgs(map: Map[String, Any]): ContextManager[F] =
+    override def withArgs[A](
+      map: Map[String, A],
+      toJson: Option[A => String] = None
+    ): ContextManager[F] =
       new ContextManagerImpl[F](
         localContext ++ map
-          .mapValues(v => Async.memoize(JsonInString.make(toJson)(v))),
-        toJson
+          .mapValues(
+            v =>
+              Async
+                .memoize(JsonInString.make(toJson.getOrElse(toJsonGlobal))(v))
+          ),
+        toJsonGlobal
       )
 
     override def use[A](inner: F[A]): F[A] = {
@@ -108,9 +131,13 @@ object ContextManager {
 
 trait Logger[F[_]] {
   type Self <: Logger[F]
-  def withArg(name: String, value: => Any): Self
-  def withComputed(name: String, value: F[Any]): Self
-  def withArgs(map: Map[String, Any]): Self
+  def withArg[A](name: String,
+                 value: => A,
+                 toJson: Option[A => String] = None): Self
+  def withComputed[A](name: String,
+                      value: F[A],
+                      toJson: Option[A => String] = None): Self
+  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
   def info: LoggerInfo[F]
 }
 
@@ -119,7 +146,7 @@ object Logger {
   private class LoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
     localContext: ContextManager.Context[F],
-    toJson: Any => String
+    toJsonGlobal: Any => String
   )(implicit FSync: Sync[F],
     FApplicativeAsk: ApplicativeAsk[F, ContextManager.Context[F]])
       extends Logger[F] {
@@ -129,20 +156,33 @@ object Logger {
     override def info: LoggerInfo[F] =
       new LoggerInfo[F](underlying, localContext.mapValues(FSync.pure))
 
-    override def withArg(name: String, value: => Any): Logger[F] =
+    override def withArg[A](name: String,
+                            value: => A,
+                            toJson: Option[A => String] = None): Logger[F] =
       withComputed(name, FSync.delay { value })
 
-    override def withComputed(name: String, value: F[Any]): Logger[F] = {
-      val json = value.flatMap(ContextManager.JsonInString.make(toJson)(_))
-      new LoggerImpl[F](underlying, localContext + ((name, json)), toJson)
+    override def withComputed[A](
+      name: String,
+      value: F[A],
+      toJson: Option[A => String] = None
+    ): Logger[F] = {
+      val json = value.flatMap(
+        ContextManager.JsonInString.make(toJson.getOrElse(toJsonGlobal))(_)
+      )
+      new LoggerImpl[F](underlying, localContext + ((name, json)), toJsonGlobal)
     }
 
-    override def withArgs(map: Map[String, Any]): Logger[F] =
+    override def withArgs[A](map: Map[String, A],
+                             toJson: Option[A => String] = None): Logger[F] =
       new LoggerImpl[F](
         underlying,
         localContext ++ map
-          .mapValues(v => ContextManager.JsonInString.make(toJson)(v)),
-        toJson
+          .mapValues(
+            v =>
+              ContextManager.JsonInString
+                .make(toJson.getOrElse(toJsonGlobal))(v)
+          ),
+        toJsonGlobal
       )
 
   }
@@ -186,7 +226,7 @@ object ContextLogger {
   private class ContextLoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
     context: Map[String, F[F[JsonInString]]],
-    toJson: Any => String
+    toJsonGlobal: Any => String
   )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
     FAsync: Async[F])
       extends ContextLogger[F] {
@@ -196,29 +236,46 @@ object ContextLogger {
     override def info: LoggerInfo[F] =
       new LoggerInfo[F](underlying, context)
 
-    override def withArg(name: String, value: => Any): ContextLogger[F] =
+    override def withArg[A](
+      name: String,
+      value: => A,
+      toJson: Option[A => String] = None
+    ): ContextLogger[F] =
       withComputed(name, FAsync.delay {
         value
       })
 
-    override def withComputed(name: String, value: F[Any]): ContextLogger[F] = {
+    override def withComputed[A](
+      name: String,
+      value: F[A],
+      toJson: Option[A => String] = None
+    ): ContextLogger[F] = {
       val memoizedJson =
-        Async.memoize(value.flatMap(JsonInString.make(toJson)(_)))
+        Async.memoize(
+          value.flatMap(JsonInString.make(toJson.getOrElse(toJsonGlobal))(_))
+        )
       new ContextLoggerImpl[F](
         underlying,
         context + ((name, memoizedJson)),
-        toJson
+        toJsonGlobal
       )
     }
 
-    override def withArgs(map: Map[String, Any]): ContextLogger[F] =
+    override def withArgs[A](
+      map: Map[String, A],
+      toJson: Option[A => String] = None
+    ): ContextLogger[F] =
       new ContextLoggerImpl[F](
         underlying,
         context ++ map
           .mapValues(
-            v => Async.memoize(ContextManager.JsonInString.make(toJson)(v))
+            v =>
+              Async.memoize(
+                ContextManager.JsonInString
+                  .make(toJson.getOrElse(toJsonGlobal))(v)
+            )
           ),
-        toJson
+        toJsonGlobal
       )
 
     override def use[A](inner: F[A]): F[A] = {
