@@ -25,6 +25,7 @@ trait Logger[F[_]] {
                       toJson: Option[A => String] = None): Self
   def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
   def info: LoggerInfo[F]
+  def warn: LoggerWarn[F]
 }
 
 trait ContextLogger[F[_]] extends ContextManager[F] with Logger[F] {
@@ -72,6 +73,14 @@ object LoggerCommand {
       c: Context[F]
     )(message: c.Expr[String], throwable: c.Expr[Throwable]): c.Expr[F[Unit]] =
       logThrowable(c)(c.universe.TermName("info"), message, throwable)
+
+    def warn[F[_]](c: Context[F])(message: c.Expr[String]): c.Expr[F[Unit]] =
+      log(c)(c.universe.TermName("warn"), message)
+
+    def warnThrowable[F[_]](
+      c: Context[F]
+    )(message: c.Expr[String], throwable: c.Expr[Throwable]): c.Expr[F[Unit]] =
+      logThrowable(c)(c.universe.TermName("warn"), message, throwable)
   }
 }
 
@@ -79,4 +88,10 @@ abstract class LoggerInfo[F[_]]() extends LoggerCommand[F] {
   def apply(message: String): F[Unit] = macro LoggerCommand.Macros.info[F]
   def apply(message: String, throwable: Throwable): F[Unit] =
     macro LoggerCommand.Macros.infoThrowable[F]
+}
+
+abstract class LoggerWarn[F[_]]() extends LoggerCommand[F] {
+  def apply(message: String): F[Unit] = macro LoggerCommand.Macros.warn[F]
+  def apply(message: String, throwable: Throwable): F[Unit] =
+    macro LoggerCommand.Macros.warnThrowable[F]
 }

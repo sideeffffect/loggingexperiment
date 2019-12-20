@@ -105,6 +105,20 @@ object ContextLogger {
     }
   }
 
+  private class LoggerWarnImpl[F[_]](
+    val underlying: org.slf4j.Logger,
+    val localContext: Map[String, F[F[JsonInString]]]
+  )(implicit
+    val FSync: Sync[F],
+    val FApplicativeAsk: ApplicativeAsk[F, Context[F]])
+      extends LoggerWarn[F]
+      with LoggerCommandImpl[F] {
+
+    override protected val isEnabled: F[Boolean] = FSync.delay {
+      underlying.isWarnEnabled
+    }
+  }
+
   private class ContextLoggerImpl[F[_]](
     underlying: org.slf4j.Logger,
     context: Map[String, F[F[JsonInString]]],
@@ -117,6 +131,9 @@ object ContextLogger {
 
     override def info: LoggerInfo[F] =
       new LoggerInfoImpl[F](underlying, context)
+
+    override def warn: LoggerWarn[F] =
+      new LoggerWarnImpl[F](underlying, context)
 
     override def withArg[A](
       name: String,

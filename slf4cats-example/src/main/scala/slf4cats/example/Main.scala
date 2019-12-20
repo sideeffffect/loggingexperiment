@@ -38,11 +38,11 @@ object MonixLog {
 
 object Main extends TaskApp {
 
-  final case class A(x: Int, y: String)
+  final case class A(x: Int, y: String, bytes: Array[Byte])
 
   final case class B(a: A, b: Boolean)
 
-  private val o = B(A(123, "Hello"), b = true)
+  private val o = B(A(123, "Hello", Array(1, 2, 3)), b = true)
 
   override def run(args: List[String]): Task[ExitCode] =
     init
@@ -60,10 +60,10 @@ object Main extends TaskApp {
     val ex = new InvalidParameterException("BOOOOOM")
     for {
       _ <- logger
-        .withArg("a", A(1, "x"))
+        .withArg("a", A(1, "x", Array(127)))
         .withArg("o", o)
         .info("Hello Monix")
-      _ <- logger.info("Hello MTL", ex)
+      _ <- logger.warn("Hello MTL", ex)
       _ <- logger.withArg("x", 123).withArg("o", o).use {
         logger.withArg("x", 9).info("Hello2 meow")
       }
