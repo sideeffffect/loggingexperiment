@@ -17,35 +17,47 @@ lazy val Version = new {
 lazy val root = project
   .in(file("."))
   .settings(
-    name := "loggingexperiment",
+    name := "slf4cats",
     publish / skip := true, // doesn't publish ivy XML files, in contrast to "publishArtifact := false"
   )
   .aggregate(
-    logbackMtlBuilder,
-    logbackMtlBuilderApp,
+    slf4catsApi,
+    slf4catsImpl,
+    slf4catsExample,
   )
 
-lazy val logbackMtlBuilder = project
-  .in(file("logback-mtl-builder"))
+lazy val slf4catsApi = project
+  .in(file("slf4cats-api"))
   .settings(
-    name := "logback-mtl-builder",
+    name := "slf4cats-api",
     libraryDependencies ++= Seq(
       "org.slf4j" % "slf4j-api" % Version.slf4j,
-      "ch.qos.logback" % "logback-classic" % Version.logback,
-      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
-      "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
     )
   )
 
-lazy val logbackMtlBuilderApp = project
-  .in(file("logback-mtl-builder-app"))
+lazy val slf4catsImpl = project
+  .in(file("slf4cats-impl"))
   .settings(
-    name := "logback-mtl-builder-app",
+    name := "slf4cats-impl",
     libraryDependencies ++= Seq(
+      "org.slf4j" % "slf4j-api" % Version.slf4j,
+      "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
+      "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
+      "org.typelevel" %% "cats-effect" % Version.catsEffect,
+    )
+  )
+  .dependsOn(slf4catsApi)
+
+lazy val slf4catsExample = project
+  .in(file("slf4cats-example"))
+  .settings(
+    name := "slf4cats-example",
+    libraryDependencies ++= Seq(
+      "ch.qos.logback" % "logback-classic" % Version.logback,
       "io.monix" %% "monix" %  Version.monix,
       "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
     )
   )
-  .dependsOn(logbackMtlBuilder)
+  .dependsOn(slf4catsImpl)

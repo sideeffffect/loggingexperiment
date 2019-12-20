@@ -1,17 +1,18 @@
-package loggingexperiment.logbackmtl
+package slf4cats.example
 
 import java.security.InvalidParameterException
 
 import cats.effect._
 import com.olegpy.meow.monix._
 import monix.eval._
-import slf4cats._
+import slf4cats.api._
+import slf4cats.impl._
 
 import scala.reflect.ClassTag
 
 object MonixLog {
   def make(logger: org.slf4j.Logger)(
-    taskLocalContext: TaskLocal[ContextManager.Context[Task]]
+    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromLogger(logger)
@@ -19,7 +20,7 @@ object MonixLog {
   }
 
   def make(name: String)(
-    taskLocalContext: TaskLocal[ContextManager.Context[Task]]
+    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromName(name)
@@ -27,7 +28,7 @@ object MonixLog {
   }
 
   def make[T](
-    taskLocalContext: TaskLocal[ContextManager.Context[Task]]
+    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
   )(implicit classTag: ClassTag[T]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromClass()
@@ -50,7 +51,7 @@ object Main extends TaskApp {
 
   def init: Task[Unit] =
     for {
-      mdc <- TaskLocal(ContextManager.Context.empty[Task])
+      mdc <- TaskLocal(ContextLogger.Context.empty[Task])
       logger = MonixLog.make[Main.type](mdc)
       result <- program(logger)
     } yield result
