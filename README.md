@@ -29,15 +29,34 @@ This repo contains experiments with possible implementations of structured loggi
 ## Interface
 
 ```scala
-trait ContextLogger[F[_]] {
-  type Self <: ContextLogger[F]
-  def withArg[A](name: String, value: => A)(implicit e: Encoder[A]): Self
-  def withComputed[A](name: String, value: F[A])(implicit e: Encoder[A]): Self
-  def withArgs[A](map: Map[String, A])(implicit e: Encoder[A]): Self
+trait ContextManager[F[_]] {
+  type Self <: ContextManager[F]
+  def withArg[A](name: String,
+                 value: => A,
+                 toJson: Option[A => String] = None): Self
+  def withComputed[A](name: String,
+                      value: F[A],
+                      toJson: Option[A => String] = None): Self
+  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
   def use[A](inner: F[A]): F[A]
+}
+
+trait Logger[F[_]] {
+  type Self <: Logger[F]
+  def withArg[A](name: String,
+                 value: => A,
+                 toJson: Option[A => String] = None): Self
+  def withComputed[A](name: String,
+                      value: F[A],
+                      toJson: Option[A => String] = None): Self
+  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
   // excerpt for `info` logging
   def info: LoggerInfo[F]
   //...
+}
+
+trait ContextLogger[F[_]] extends ContextManager[F] with Logger[F] {
+  type Self <: ContextLogger[F]
 }
 class LoggerInfo[F[_]] (???) {
   def apply(message: String): F[Unit] = macro ???
@@ -52,10 +71,10 @@ def program(logger: ContextLogger[Task]): Task[Unit] = {
   val ex = new InvalidParameterException("BOOOOOM")
   for {
     _ <- logger
-      .withArg("a", A(1, "x"))
+      .withArg("a", A(1, "x", Array[Byte](127)))
       .withArg("o", o)
       .info("Hello Monix")
-    _ <- logger.info("Hello MTL", ex)
+    _ <- logger.warn("Hello MTL", ex)
     _ <- logger.withArg("x", 123).withArg("o", o).use {
       logger.withArg("x", 9).info("Hello2 meow")
     }
@@ -66,33 +85,35 @@ def program(logger: ContextLogger[Task]): Task[Unit] = {
 ### Multiple contexts
 ```scala
 _ <- logger
-  .withArg("a", A(1, "x"))
+  .withArg("a", A(1, "x", Array[Byte](127)))
   .withArg("o", o)
   .info("Hello Monix")
 ```
 ```json
 {
-  "@timestamp": "2019-12-11T19:52:54.619+01:00",
+  "@timestamp": "2019-12-20T11:02:44.837+01:00",
   "@version": "1",
   "message": "Hello Monix",
-  "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-13",
+  "logger_name": "slf4cats.example.Main$",
+  "thread_name": "scala-execution-context-global-14",
   "level": "INFO",
   "level_value": 20000,
   "a": {
     "x": 1,
-    "y": "x"
+    "y": "x",
+    "bytes": "fw=="
   },
   "o": {
     "a": {
       "x": 123,
-      "y": "Hello"
+      "y": "Hello",
+      "bytes": "AQID"
     },
     "b": true
   },
   "application": "loggingexperiment",
-  "caller_class_name": "loggingexperiment.logbackmtl.Main$",
-  "caller_method_name": "$anonfun$program$7",
+  "caller_class_name": "slf4cats.example.Main$",
+  "caller_method_name": "$anonfun$program$5",
   "caller_file_name": "Main.scala",
   "caller_line_number": 65
 }
@@ -100,21 +121,21 @@ _ <- logger
 
 ### Logging exception
 ```scala
-_ <- logger.info("Hello MTL", ex)
+_ <- logger.warn("Hello MTL", ex)
 ```
 ```json
 {
-  "@timestamp": "2019-12-11T19:52:54.631+01:00",
+  "@timestamp": "2019-12-20T11:02:44.856+01:00",
   "@version": "1",
   "message": "Hello MTL",
-  "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-13",
-  "level": "INFO",
-  "level_value": 20000,
-  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat loggingexperiment.logbackmtl.Main$.program(Main.scala:60)\n...",
+  "logger_name": "slf4cats.example.Main$",
+  "thread_name": "scala-execution-context-global-14",
+  "level": "WARN",
+  "level_value": 30000,
+  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat slf4cats.example.Main$.program(Main.scala:60)\n...",
   "application": "loggingexperiment",
-  "caller_class_name": "loggingexperiment.logbackmtl.Main$",
-  "caller_method_name": "$anonfun$program$11",
+  "caller_class_name": "slf4cats.example.Main$",
+  "caller_method_name": "$anonfun$program$9",
   "caller_file_name": "Main.scala",
   "caller_line_number": 66
 }
@@ -128,24 +149,25 @@ _ <- logger.withArg("x", 123).withArg("o", o).use {
 ```
 ```json
 {
-  "@timestamp": "2019-12-11T19:52:54.645+01:00",
+  "@timestamp": "2019-12-20T11:02:44.882+01:00",
   "@version": "1",
   "message": "Hello2 meow",
-  "logger_name": "loggingexperiment.logbackmtl.Main$",
-  "thread_name": "scala-execution-context-global-13",
+  "logger_name": "slf4cats.example.Main$",
+  "thread_name": "scala-execution-context-global-15",
   "level": "INFO",
   "level_value": 20000,
   "x": 9,
   "o": {
     "a": {
       "x": 123,
-      "y": "Hello"
+      "y": "Hello",
+      "bytes": "AQID"
     },
     "b": true
   },
   "application": "loggingexperiment",
-  "caller_class_name": "loggingexperiment.logbackmtl.Main$",
-  "caller_method_name": "$anonfun$program$19",
+  "caller_class_name": "slf4cats.example.Main$",
+  "caller_method_name": "$anonfun$program$16",
   "caller_file_name": "Main.scala",
   "caller_line_number": 68
 }
