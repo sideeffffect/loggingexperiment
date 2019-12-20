@@ -22,7 +22,7 @@ This repo contains experiments with possible implementations of structured loggi
 
 ## Implementation considerations
 
- * use Circe for the encoding
+ * use Jackson for the encoding by default (used by Logback Logstash encoder too)
  * mimic `slf4j`'s `Logger` API/capabilities
     * always as free-form strings -- simplest solution
 
