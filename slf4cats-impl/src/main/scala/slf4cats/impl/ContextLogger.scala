@@ -12,6 +12,7 @@ import org.slf4j.{LoggerFactory, Marker}
 import slf4cats.api._
 
 import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 object ContextLogger {
 
@@ -30,7 +31,7 @@ object ContextLogger {
       F.delay {
           toJson(x)
         }
-        .handleError(e => "\"<" + e + ">\"")
+        .recover { case NonFatal(e) => "\"<" + e + ">\"" }
     }
   }
 
@@ -142,9 +143,13 @@ object ContextLogger {
         value: => A,
         toJson: Option[A => String] = None,
     ): ContextLogger[F] =
-      withComputed(name, FAsync.delay {
-        value
-      })
+      withComputed(
+        name,
+        FAsync.delay {
+          value
+        },
+        toJson,
+      )
 
     override def withComputed[A](
         name: String,
