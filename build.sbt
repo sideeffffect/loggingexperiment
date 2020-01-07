@@ -34,7 +34,7 @@ lazy val slf4catsApi = project
       "org.slf4j" % "slf4j-api" % Version.slf4j,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,
       "org.scala-lang" % "scala-reflect" % scalaVersion.value,
-    )
+    ),
   )
 
 lazy val slf4catsImpl = project
@@ -42,11 +42,10 @@ lazy val slf4catsImpl = project
   .settings(
     name := "slf4cats-impl",
     libraryDependencies ++= Seq(
-      "org.slf4j" % "slf4j-api" % Version.slf4j,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
       "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,
-    )
+    ),
   )
   .dependsOn(slf4catsApi)
 
@@ -56,8 +55,8 @@ lazy val slf4catsExample = project
     name := "slf4cats-example",
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % Version.logback,
-      "io.monix" %% "monix" %  Version.monix,
+      "io.monix" %% "monix" % Version.monix,
       "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
-    )
+    ),
   )
   .dependsOn(slf4catsImpl)

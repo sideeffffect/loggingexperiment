@@ -15,37 +15,36 @@ import scala.reflect.ClassTag
 
 object ContextLogger {
 
-  class JsonInString private (private[ContextLogger] val raw: String)
-      extends AnyVal
-
   object JsonInString {
 
     val defaultToJson: Any => String = {
       val jackson = new ObjectMapper()
       jackson.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
       jackson.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
-      x =>
-        jackson.writeValueAsString(x)
+      jackson.writeValueAsString
     }
 
     private[ContextLogger] def make[F[_], A](
-      toJson: A => String
-    )(x: A)(implicit F: Sync[F]): F[JsonInString] = {
-      F.delay { new JsonInString(toJson(x)) }
+        toJson: A => String,
+    )(x: A)(implicit F: Sync[F]): F[String] = {
+      F.delay {
+          toJson(x)
+        }
+        .handleError(e => "\"<" + e + ">\"")
     }
   }
 
-  type Context[F[_]] = Map[String, F[JsonInString]]
+  type Context[F[_]] = Map[String, F[String]]
   object Context {
     def empty[F[_]]: Context[F] = Map.empty
   }
 
-  private[slf4cats] def mapSequence[F[_], K, V](
-    m: Map[K, F[V]]
+  private def mapSequence[F[_], K, V](
+      m: Map[K, F[V]],
   )(implicit FApplicative: Applicative[F]): F[Map[K, V]] = {
     m.foldLeft(FApplicative.pure(Map.empty[K, V])) {
-      case (m, (k, fv)) =>
-        FApplicative.tuple2(m, fv).map {
+      case (fm, (k, fv)) =>
+        FApplicative.tuple2(fm, fv).map {
           case (m, v) =>
             m + ((k, v))
         }
@@ -56,7 +55,7 @@ object ContextLogger {
 
     def underlying: org.slf4j.Logger
 
-    def localContext: Map[String, F[F[JsonInString]]]
+    def localContext: Map[String, F[F[String]]]
 
     implicit def FSync: Sync[F]
 
@@ -68,7 +67,7 @@ object ContextLogger {
       union <- mapSequence(context1 ++ context2)
       markers = union.toList.map {
         case (k, v) =>
-          Markers.appendRaw(k, v.raw)
+          Markers.appendRaw(k, v)
       }
       result = Markers.aggregate(markers: _*)
     } yield result
@@ -76,7 +75,7 @@ object ContextLogger {
     protected def isEnabled: F[Boolean]
 
     def withUnderlying(
-      macroCallback: (Sync[F], org.slf4j.Logger) => (Marker => F[Unit])
+        macroCallback: (Sync[F], org.slf4j.Logger) => (Marker => F[Unit]),
     ): F[Unit] = {
       val body = macroCallback(FSync, underlying)
       isEnabled.flatMap { isEnabled =>
@@ -92,12 +91,13 @@ object ContextLogger {
   }
 
   private class LoggerInfoImpl[F[_]](
-    val underlying: org.slf4j.Logger,
-    val localContext: Map[String, F[F[JsonInString]]]
-  )(implicit
-    val FSync: Sync[F],
-    val FApplicativeAsk: ApplicativeAsk[F, Context[F]])
-      extends LoggerInfo[F]
+      val underlying: org.slf4j.Logger,
+      val localContext: Map[String, F[F[String]]],
+  )(
+      implicit
+      val FSync: Sync[F],
+      val FApplicativeAsk: ApplicativeAsk[F, Context[F]],
+  ) extends LoggerInfo[F]
       with LoggerCommandImpl[F] {
 
     override protected val isEnabled: F[Boolean] = FSync.delay {
@@ -106,12 +106,13 @@ object ContextLogger {
   }
 
   private class LoggerWarnImpl[F[_]](
-    val underlying: org.slf4j.Logger,
-    val localContext: Map[String, F[F[JsonInString]]]
-  )(implicit
-    val FSync: Sync[F],
-    val FApplicativeAsk: ApplicativeAsk[F, Context[F]])
-      extends LoggerWarn[F]
+      val underlying: org.slf4j.Logger,
+      val localContext: Map[String, F[F[String]]],
+  )(
+      implicit
+      val FSync: Sync[F],
+      val FApplicativeAsk: ApplicativeAsk[F, Context[F]],
+  ) extends LoggerWarn[F]
       with LoggerCommandImpl[F] {
 
     override protected val isEnabled: F[Boolean] = FSync.delay {
@@ -120,12 +121,13 @@ object ContextLogger {
   }
 
   private class ContextLoggerImpl[F[_]](
-    underlying: org.slf4j.Logger,
-    context: Map[String, F[F[JsonInString]]],
-    toJsonGlobal: Any => String
-  )(implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
-    FAsync: Async[F])
-      extends ContextLogger[F] {
+      underlying: org.slf4j.Logger,
+      context: Map[String, F[F[String]]],
+      toJsonGlobal: Any => String,
+  )(
+      implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
+      FAsync: Async[F],
+  ) extends ContextLogger[F] {
 
     override type Self = ContextLogger[F]
 
@@ -136,46 +138,45 @@ object ContextLogger {
       new LoggerWarnImpl[F](underlying, context)
 
     override def withArg[A](
-      name: String,
-      value: => A,
-      toJson: Option[A => String] = None
+        name: String,
+        value: => A,
+        toJson: Option[A => String] = None,
     ): ContextLogger[F] =
       withComputed(name, FAsync.delay {
         value
       })
 
     override def withComputed[A](
-      name: String,
-      value: F[A],
-      toJson: Option[A => String] = None
+        name: String,
+        value: F[A],
+        toJson: Option[A => String] = None,
     ): ContextLogger[F] = {
       val memoizedJson =
         Async.memoize(
-          value.flatMap(JsonInString.make(toJson.getOrElse(toJsonGlobal))(_))
+          value.flatMap(JsonInString.make(toJson.getOrElse(toJsonGlobal))(_)),
         )
       new ContextLoggerImpl[F](
         underlying,
         context + ((name, memoizedJson)),
-        toJsonGlobal
+        toJsonGlobal,
       )
     }
 
     override def withArgs[A](
-      map: Map[String, A],
-      toJson: Option[A => String] = None
+        map: Map[String, A],
+        toJson: Option[A => String] = None,
     ): ContextLogger[F] = {
       val toJsonLocal = toJson.getOrElse(toJsonGlobal)
       new ContextLoggerImpl[F](
         underlying,
         context ++ map
-          .mapValues(
-            v =>
-              Async.memoize(
-                JsonInString
-                  .make(toJsonLocal)(v)
-            )
+          .mapValues(v =>
+            Async.memoize(
+              JsonInString
+                .make(toJsonLocal)(v),
+            ),
           ),
-        toJsonGlobal
+        toJsonGlobal,
       )
     }
 
@@ -187,28 +188,30 @@ object ContextLogger {
   }
 
   def fromLogger[F[_]](
-    logger: org.slf4j.Logger,
-    toJson: Option[Any => String] = None
-  )(implicit FAsync: Async[F],
-    FApplicativeLocal: ApplicativeLocal[F, Context[F]]): ContextLogger[F] = {
+      logger: org.slf4j.Logger,
+      toJson: Option[Any => String] = None,
+  )(
+      implicit FAsync: Async[F],
+      FApplicativeLocal: ApplicativeLocal[F, Context[F]],
+  ): ContextLogger[F] = {
     new ContextLoggerImpl[F](
       logger,
       Map.empty,
-      toJson.getOrElse(JsonInString.defaultToJson)
+      toJson.getOrElse(JsonInString.defaultToJson),
     )
   }
 
   def fromName[F[_]](name: String, toJson: Option[Any => String] = None)(
-    implicit FAsync: Async[F],
-    FApplicativeAsk: ApplicativeLocal[F, Context[F]]
+      implicit FAsync: Async[F],
+      FApplicativeAsk: ApplicativeLocal[F, Context[F]],
   ): ContextLogger[F] = {
     fromLogger(LoggerFactory.getLogger(name), toJson)
   }
 
   def fromClass[F[_], T](toJson: Option[Any => String] = None)(
-    implicit classTag: ClassTag[T],
-    FAsync: Async[F],
-    FApplicativeAsk: ApplicativeLocal[F, Context[F]]
+      implicit classTag: ClassTag[T],
+      FAsync: Async[F],
+      FApplicativeAsk: ApplicativeLocal[F, Context[F]],
   ): ContextLogger[F] = {
     fromLogger(LoggerFactory.getLogger(classTag.runtimeClass), toJson)
   }

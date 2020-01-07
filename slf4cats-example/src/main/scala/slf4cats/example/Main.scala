@@ -12,7 +12,7 @@ import scala.reflect.ClassTag
 
 object MonixLog {
   def make(logger: org.slf4j.Logger)(
-    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
+      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromLogger(logger)
@@ -20,7 +20,7 @@ object MonixLog {
   }
 
   def make(name: String)(
-    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
+      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
   ): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromName(name)
@@ -28,7 +28,7 @@ object MonixLog {
   }
 
   def make[T](
-    taskLocalContext: TaskLocal[ContextLogger.Context[Task]]
+      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
   )(implicit classTag: ClassTag[T]): ContextLogger[Task] = {
     taskLocalContext.runLocal { implicit ev =>
       ContextLogger.fromClass()

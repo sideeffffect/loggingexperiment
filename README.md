@@ -29,8 +29,8 @@ This repo contains experiments with possible implementations of structured loggi
 ## Interface
 
 ```scala
-trait ContextManager[F[_]] {
-  type Self <: ContextManager[F]
+trait LoggingContext[F[_]] {
+  type Self <: LoggingContext[F]
   def withArg[A](name: String,
                  value: => A,
                  toJson: Option[A => String] = None): Self
@@ -55,7 +55,7 @@ trait Logger[F[_]] {
   //...
 }
 
-trait ContextLogger[F[_]] extends ContextManager[F] with Logger[F] {
+trait ContextLogger[F[_]] extends LoggingContext[F] with Logger[F] {
   type Self <: ContextLogger[F]
 }
 class LoggerInfo[F[_]]() {
