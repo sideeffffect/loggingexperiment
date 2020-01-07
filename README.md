@@ -20,11 +20,16 @@ This repo contains experiments with possible implementations of structured loggi
    * ... to be specified
  * JSON keys will be just strings, at lest for the beginning
 
-## Implementation considerations
+## Features
 
- * use Jackson for the encoding by default (used by Logback Logstash encoder too)
- * mimic `slf4j`'s `Logger` API/capabilities
-    * always as free-form strings -- simplest solution
+ * thin wrapper over `slf4j`
+    * each logging statement is inlined on the same line using macros
+    * rest of the logging pipeline works as expected
+ * JSON logging
+    * uses `logstash-logback-encoder` for JSON log formatting
+    * uses Jackson for the encoding of log parameters by default (imported by Logback Logstash encoder anyway; can be overridden if necessary)
+ * CPU expensive or side-effectful actions can be passed to logs
+    * will be memoized == computed only once or never at all, if log level too low
 
 ## Interface
 
