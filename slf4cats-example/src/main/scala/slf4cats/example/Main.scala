@@ -40,9 +40,10 @@ object Main extends TaskApp {
 
   final case class A(x: Int, y: String, bytes: Array[Byte])
 
-  final case class B(a: A, b: Boolean)
+  final case class B(a: A, b: List[Boolean], c: Either[String, Int])
 
-  private val o = B(A(123, "Hello", Array(1, 2, 3)), b = true)
+  private val o =
+    B(A(123, "Hello", Array(1, 2, 3)), List(false, true), Right(456))
 
   override def run(args: List[String]): Task[ExitCode] =
     init
@@ -65,7 +66,7 @@ object Main extends TaskApp {
         .info("Hello Monix")
       _ <- logger.warn("Hello MTL", ex)
       _ <- logger.withArg("x", 123).withArg("o", o).use {
-        logger.withArg("x", 9).info("Hello2 meow")
+        logger.withArg("x", List(1, 2, 3)).info("Hello2 meow")
       }
     } yield ()
   }

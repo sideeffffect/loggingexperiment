@@ -7,6 +7,7 @@ scalaVersion := "2.12.10"
 lazy val Version = new {
   val slf4j = "1.7.29"
   val logback = "1.2.3"
+  val jacksonScala = "2.10.2"
   val logstashLogback = "6.2"
   val monix = "3.1.0"
   val catsMtl = "0.7.0"
@@ -42,6 +43,7 @@ lazy val slf4catsImpl = project
   .settings(
     name := "slf4cats-impl",
     libraryDependencies ++= Seq(
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % Version.jacksonScala,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
       "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,

@@ -96,11 +96,11 @@ _ <- logger
 ```
 ```json
 {
-  "@timestamp": "2019-12-20T11:02:44.837+01:00",
+  "@timestamp": "2020-01-08T02:31:16.503+01:00",
   "@version": "1",
   "message": "Hello Monix",
   "logger_name": "slf4cats.example.Main$",
-  "thread_name": "scala-execution-context-global-14",
+  "thread_name": "scala-execution-context-global-13",
   "level": "INFO",
   "level_value": 20000,
   "a": {
@@ -114,13 +114,19 @@ _ <- logger
       "y": "Hello",
       "bytes": "AQID"
     },
-    "b": true
+    "b": [
+      false,
+      true
+    ],
+    "c": {
+      "r": 456
+    }
   },
   "application": "loggingexperiment",
   "caller_class_name": "slf4cats.example.Main$",
   "caller_method_name": "$anonfun$program$5",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 65
+  "caller_line_number": 66
 }
 ```
 
@@ -130,19 +136,19 @@ _ <- logger.warn("Hello MTL", ex)
 ```
 ```json
 {
-  "@timestamp": "2019-12-20T11:02:44.856+01:00",
+  "@timestamp": "2020-01-08T02:31:16.520+01:00",
   "@version": "1",
   "message": "Hello MTL",
   "logger_name": "slf4cats.example.Main$",
-  "thread_name": "scala-execution-context-global-14",
+  "thread_name": "scala-execution-context-global-13",
   "level": "WARN",
   "level_value": 30000,
-  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat slf4cats.example.Main$.program(Main.scala:60)\n...",
+  "stack_trace": "java.security.InvalidParameterException: BOOOOOM\n\tat slf4cats.example.Main$.program(Main.scala:61)\n...",
   "application": "loggingexperiment",
   "caller_class_name": "slf4cats.example.Main$",
   "caller_method_name": "$anonfun$program$9",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 66
+  "caller_line_number": 67
 }
 ```
 
@@ -154,26 +160,36 @@ _ <- logger.withArg("x", 123).withArg("o", o).use {
 ```
 ```json
 {
-  "@timestamp": "2019-12-20T11:02:44.882+01:00",
+  "@timestamp": "2020-01-08T02:31:16.539+01:00",
   "@version": "1",
   "message": "Hello2 meow",
   "logger_name": "slf4cats.example.Main$",
-  "thread_name": "scala-execution-context-global-15",
+  "thread_name": "scala-execution-context-global-13",
   "level": "INFO",
   "level_value": 20000,
-  "x": 9,
+  "x": [
+    1,
+    2,
+    3
+  ],
   "o": {
     "a": {
       "x": 123,
       "y": "Hello",
       "bytes": "AQID"
     },
-    "b": true
+    "b": [
+      false,
+      true
+    ],
+    "c": {
+      "r": 456
+    }
   },
   "application": "loggingexperiment",
   "caller_class_name": "slf4cats.example.Main$",
   "caller_method_name": "$anonfun$program$16",
   "caller_file_name": "Main.scala",
-  "caller_line_number": 68
+  "caller_line_number": 69
 }
 ```

@@ -4,9 +4,8 @@ import cats._
 import cats.effect._
 import cats.implicits._
 import cats.mtl._
-import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
-import com.fasterxml.jackson.annotation.PropertyAccessor
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.logstash.logback.marker.Markers
 import org.slf4j.{LoggerFactory, Marker}
 import slf4cats.api._
@@ -20,8 +19,7 @@ object ContextLogger {
 
     val defaultToJson: Any => String = {
       val jackson = new ObjectMapper()
-      jackson.setVisibility(PropertyAccessor.ALL, Visibility.NONE)
-      jackson.setVisibility(PropertyAccessor.FIELD, Visibility.ANY)
+      jackson.registerModule(DefaultScalaModule)
       jackson.writeValueAsString
     }
 
