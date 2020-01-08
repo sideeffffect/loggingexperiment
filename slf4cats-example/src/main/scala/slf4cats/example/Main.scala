@@ -58,6 +58,7 @@ object Main extends TaskApp {
     } yield result
 
   def program(logger: ContextLogger[Task]): Task[Unit] = {
+    import slf4cats.encoders.jackson._
     val ex = new InvalidParameterException("BOOOOOM")
     for {
       _ <- logger
@@ -65,8 +66,15 @@ object Main extends TaskApp {
         .withArg("o", o)
         .info("Hello Monix")
       _ <- logger.warn("Hello MTL", ex)
+      // test shadowing of arg "x"
       _ <- logger.withArg("x", 123).withArg("o", o).use {
         logger.withArg("x", List(1, 2, 3)).info("Hello2 meow")
+      }
+      // test context passing on child fibers
+      _ <- logger.withArg("o", o).use {
+        logger.withArg("x", List("x")).info("Hello in child fiber").start.flatMap { _ =>
+          logger.withArg("y", List("y")).info("Hello back in parent fiber")
+        }
       }
     } yield ()
   }

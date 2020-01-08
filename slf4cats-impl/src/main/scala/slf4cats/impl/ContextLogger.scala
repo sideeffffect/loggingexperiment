@@ -4,8 +4,6 @@ import cats._
 import cats.effect._
 import cats.implicits._
 import cats.mtl._
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import net.logstash.logback.marker.Markers
 import org.slf4j.{LoggerFactory, Marker}
 import slf4cats.api._
@@ -16,13 +14,6 @@ import scala.util.control.NonFatal
 object ContextLogger {
 
   object JsonInString {
-
-    val defaultToJson: Any => String = {
-      val jackson = new ObjectMapper()
-      jackson.registerModule(DefaultScalaModule)
-      jackson.writeValueAsString
-    }
-
     private[ContextLogger] def make[F[_], A](
         toJson: A => String,
     )(x: A)(implicit F: Sync[F]): F[String] = {
@@ -122,7 +113,6 @@ object ContextLogger {
   private class ContextLoggerImpl[F[_]](
       underlying: org.slf4j.Logger,
       context: Map[String, F[F[String]]],
-      toJsonGlobal: Any => String,
   )(
       implicit FApplicativeLocal: ApplicativeLocal[F, Context[F]],
       FAsync: Async[F],
@@ -139,49 +129,45 @@ object ContextLogger {
     override def withArg[A](
         name: String,
         value: => A,
-        toJson: Option[A => String] = None,
-    ): ContextLogger[F] =
+    )(implicit logEncoder: LogEncoder[A]): ContextLogger[F] =
       withComputed(
         name,
         FAsync.delay {
           value
         },
-        toJson,
       )
 
     override def withComputed[A](
         name: String,
         value: F[A],
-        toJson: Option[A => String] = None,
-    ): ContextLogger[F] = {
+    )(implicit logEncoder: LogEncoder[A]): ContextLogger[F] = {
       val memoizedJson =
         Async.memoize(
-          value.flatMap(JsonInString.make(toJson.getOrElse(toJsonGlobal))(_)),
+          value.flatMap(JsonInString.make(logEncoder.encode)(_)),
         )
       new ContextLoggerImpl[F](
         underlying,
         context + ((name, memoizedJson)),
-        toJsonGlobal,
       )
     }
 
-    override def withArgs[A](
-        map: Map[String, A],
-        toJson: Option[A => String] = None,
-    ): ContextLogger[F] = {
-      val toJsonLocal = toJson.getOrElse(toJsonGlobal)
-      new ContextLoggerImpl[F](
-        underlying,
-        context ++ map
-          .mapValues(v =>
-            Async.memoize(
-              JsonInString
-                .make(toJsonLocal)(v),
-            ),
-          ),
-        toJsonGlobal,
-      )
-    }
+//    override def withArgs[A](
+//        map: Map[String, A],
+//        toJson: Option[A => String] = None,
+//    ): ContextLogger[F] = {
+//      val toJsonLocal = toJson.getOrElse(toJsonGlobal)
+//      new ContextLoggerImpl[F](
+//        underlying,
+//        context ++ map
+//          .mapValues(v =>
+//            Async.memoize(
+//              JsonInString
+//                .make(toJsonLocal)(v),
+//            ),
+//          ),
+//        toJsonGlobal,
+//      )
+//    }
 
     override def use[A](inner: F[A]): F[A] = {
       mapSequence(context).flatMap { contextMemoized =>
@@ -192,7 +178,6 @@ object ContextLogger {
 
   def fromLogger[F[_]](
       logger: org.slf4j.Logger,
-      toJson: Option[Any => String] = None,
   )(
       implicit FAsync: Async[F],
       FApplicativeLocal: ApplicativeLocal[F, Context[F]],
@@ -200,23 +185,22 @@ object ContextLogger {
     new ContextLoggerImpl[F](
       logger,
       Map.empty,
-      toJson.getOrElse(JsonInString.defaultToJson),
     )
   }
 
-  def fromName[F[_]](name: String, toJson: Option[Any => String] = None)(
+  def fromName[F[_]](name: String)(
       implicit FAsync: Async[F],
       FApplicativeAsk: ApplicativeLocal[F, Context[F]],
   ): ContextLogger[F] = {
-    fromLogger(LoggerFactory.getLogger(name), toJson)
+    fromLogger(LoggerFactory.getLogger(name))
   }
 
-  def fromClass[F[_], T](toJson: Option[Any => String] = None)(
+  def fromClass[F[_], T]()(
       implicit classTag: ClassTag[T],
       FAsync: Async[F],
       FApplicativeAsk: ApplicativeLocal[F, Context[F]],
   ): ContextLogger[F] = {
-    fromLogger(LoggerFactory.getLogger(classTag.runtimeClass), toJson)
+    fromLogger(LoggerFactory.getLogger(classTag.runtimeClass))
   }
 
 }
