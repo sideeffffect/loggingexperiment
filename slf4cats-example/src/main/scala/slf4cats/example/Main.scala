@@ -3,38 +3,10 @@ package slf4cats.example
 import java.security.InvalidParameterException
 
 import cats.effect._
-import com.olegpy.meow.monix._
 import monix.eval._
 import slf4cats.api._
 import slf4cats.impl._
-
-import scala.reflect.ClassTag
-
-object MonixLog {
-  def make(logger: org.slf4j.Logger)(
-      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
-  ): ContextLogger[Task] = {
-    taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.fromLogger(logger)
-    }
-  }
-
-  def make(name: String)(
-      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
-  ): ContextLogger[Task] = {
-    taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.fromName(name)
-    }
-  }
-
-  def make[T](
-      taskLocalContext: TaskLocal[ContextLogger.Context[Task]],
-  )(implicit classTag: ClassTag[T]): ContextLogger[Task] = {
-    taskLocalContext.runLocal { implicit ev =>
-      ContextLogger.fromClass()
-    }
-  }
-}
+import slf4cats.monix.ContextLoggerMonix
 
 object Main extends TaskApp {
 
@@ -53,7 +25,7 @@ object Main extends TaskApp {
   def init: Task[Unit] =
     for {
       mdc <- TaskLocal(ContextLogger.Context.empty[Task])
-      logger = MonixLog.make[Main.type](mdc)
+      logger = ContextLoggerMonix.make[Main.type](mdc)
       result <- program(logger)
     } yield result
 
@@ -68,6 +40,13 @@ object Main extends TaskApp {
       _ <- logger.withArg("x", 123).withArg("o", o).use {
         logger.withArg("x", List(1, 2, 3)).info("Hello2 meow")
       }
+      _ <- logger
+        .withArg(
+          "xxxx",
+          1,
+          Some((_: Any) => throw new RuntimeException("asdf")),
+        )
+        .info("yyyy")
     } yield ()
   }
 

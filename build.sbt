@@ -51,14 +51,23 @@ lazy val slf4catsImpl = project
   )
   .dependsOn(slf4catsApi)
 
+lazy val slf4catsMonix = project
+  .in(file("slf4cats-monix"))
+  .settings(
+    name := "slf4cats-monix",
+    libraryDependencies ++= Seq(
+      "io.monix" %% "monix" % Version.monix,
+      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
+    ),
+  )
+  .dependsOn(slf4catsImpl)
+
 lazy val slf4catsExample = project
   .in(file("slf4cats-example"))
   .settings(
     name := "slf4cats-example",
     libraryDependencies ++= Seq(
       "ch.qos.logback" % "logback-classic" % Version.logback,
-      "io.monix" %% "monix" % Version.monix,
-      "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
     ),
   )
-  .dependsOn(slf4catsImpl)
+  .dependsOn(slf4catsMonix)
