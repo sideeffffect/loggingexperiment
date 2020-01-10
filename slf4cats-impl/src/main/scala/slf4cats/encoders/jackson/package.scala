@@ -11,4 +11,10 @@ package object jackson {
     jackson.registerModule(DefaultScalaModule)
     jackson.writeValueAsString
   }
+package object jackson {
+  implicit val encoder: LogEncoder[Any] = {
+    val jackson = new ObjectMapper()
+    jackson.registerModule(DefaultScalaModule)
+    jackson.writeValueAsString
+  }
 }
