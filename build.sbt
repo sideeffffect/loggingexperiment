@@ -45,7 +45,6 @@ lazy val slf4catsImpl = project
   .settings(
     name := "slf4cats-impl",
     libraryDependencies ++= Seq(
-      "com.fasterxml.jackson.module" %% "jackson-module-scala" % Version.jacksonScala,
       "net.logstash.logback" % "logstash-logback-encoder" % Version.logstashLogback,
       "org.typelevel" %% "cats-mtl-core" % Version.catsMtl,
       "org.typelevel" %% "cats-effect" % Version.catsEffect,
@@ -63,6 +62,16 @@ lazy val slf4catsCirce = project
   )
   .dependsOn(slf4catsApi)
 
+lazy val slf4catsJackson = project
+  .in(file("slf4cats-jackson"))
+  .settings(
+    name := "slf4cats-jackson",
+    libraryDependencies ++= Seq(
+      "com.fasterxml.jackson.module" %% "jackson-module-scala" % Version.jacksonScala,
+    ),
+  )
+  .dependsOn(slf4catsApi)
+
 lazy val slf4catsExample = project
   .in(file("slf4cats-example"))
   .settings(
@@ -74,4 +83,4 @@ lazy val slf4catsExample = project
       "io.circe" %% "circe-generic" % Version.circe,
     ),
   )
-  .dependsOn(slf4catsImpl, slf4catsCirce)
+  .dependsOn(slf4catsImpl, slf4catsCirce, slf4catsJackson)
