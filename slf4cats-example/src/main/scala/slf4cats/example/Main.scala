@@ -30,6 +30,7 @@ object Main extends TaskApp {
     } yield result
 
   def program(logger: ContextLogger[Task]): Task[Unit] = {
+    import slf4cats.encoders.jackson._
     val ex = new InvalidParameterException("BOOOOOM")
     for {
       _ <- logger
@@ -37,17 +38,33 @@ object Main extends TaskApp {
         .withArg("o", o)
         .info("Hello Monix")
       _ <- logger.warn("Hello MTL", ex)
+      // test shadowing of arg "x"
       _ <- logger.withArg("x", 123).withArg("o", o).use {
         logger.withArg("x", List(1, 2, 3)).info("Hello2 meow")
       }
+      // test context passing on child fibers
+      _ <- logger.withArg("o", o).use {
+        logger.withArg("x", List("x")).info("Hello in child fiber").start.flatMap { _ =>
+          logger.withArg("y", List("y")).info("Hello back in parent fiber")
+        }
+      }
+      // test circe encoder
+      _ <- logCirce(logger)
+      // test when LogEncoder throws an error
       _ <- logger
-        .withArg(
-          "xxxx",
-          1,
-          Some((_: Any) => throw new RuntimeException("asdf")),
-        )
+        .withArg("xxxx",1)((_: Any) => throw new RuntimeException("asdf"))
         .info("yyyy")
     } yield ()
+  }
+
+  private def logCirce(logger: ContextLogger[Task]): Task[Unit] = {
+    import slf4cats.encoders.circe._
+    import io.circe._
+    import io.circe.generic.semiauto._
+    implicit val byteArrayEncoder: Encoder[Array[Byte]] = (_: Array[Byte]) => Json.Null
+    implicit val aDecoder: Encoder[A] = deriveEncoder
+    implicitly[Encoder[Array[Byte]]] // to avoid incorrect error that byteArrayEncoder is never used
+    logger.withArg("circe", A(1, "b", Array(1, 2))).info("Logging with circe-encoded class")
   }
 
 }

@@ -3,41 +3,38 @@ package slf4cats.api
 import cats.effect.Sync
 import org.slf4j.Marker
 
-trait LoggingContext[F[_]] {
-  type Self <: LoggingContext[F]
+trait ArgumentsBuilder[F[_]] {
+  type Self <: ArgumentsBuilder[F]
   def withArg[A](
       name: String,
       value: => A,
-      toJson: Option[A => String] = None,
-  ): Self
+  )(implicit logEncoder: LogEncoder[A]): Self
   def withComputed[A](
       name: String,
       value: F[A],
-      toJson: Option[A => String] = None,
-  ): Self
-  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
+  )(implicit logEncoder: LogEncoder[A]): Self
+  def withArgs[A](map: Map[String, A])(implicit logEncoder: LogEncoder[A]): Self
+}
+
+trait LoggingContext[F[_]] extends ArgumentsBuilder[F] {
   def use[A](inner: F[A]): F[A]
 }
 
-trait Logger[F[_]] {
-  type Self <: Logger[F]
-  def withArg[A](
-      name: String,
-      value: => A,
-      toJson: Option[A => String] = None,
-  ): Self
-  def withComputed[A](
-      name: String,
-      value: F[A],
-      toJson: Option[A => String] = None,
-  ): Self
-  def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
+trait Logger[F[_]] extends ArgumentsBuilder[F] {
   def info: LoggerInfo[F]
   def warn: LoggerWarn[F]
 }
 
 trait ContextLogger[F[_]] extends LoggingContext[F] with Logger[F] {
   type Self <: ContextLogger[F]
+}
+
+trait LogEncoder[-A] {
+  def encode(a: A): String
+}
+
+object LogEncoder {
+  def apply[A](implicit e: LogEncoder[A]): LogEncoder[A] = e
 }
 
 trait LoggerCommand[F[_]] {
