@@ -3,7 +3,7 @@ package slf4cats.api
 import cats.effect.Sync
 import org.slf4j.Marker
 
-trait StructuredLoggerArguments[F[_]] {
+trait ArgumentsBuilder[F[_]] {
   type Self <: LoggingContext[F]
   def withArg[A](
       name: String,
