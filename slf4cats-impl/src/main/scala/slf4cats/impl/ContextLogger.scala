@@ -151,23 +151,20 @@ object ContextLogger {
       )
     }
 
-//    override def withArgs[A](
-//        map: Map[String, A],
-//        toJson: Option[A => String] = None,
-//    ): ContextLogger[F] = {
-//      val toJsonLocal = toJson.getOrElse(toJsonGlobal)
-//      new ContextLoggerImpl[F](
-//        underlying,
-//        context ++ map
-//          .mapValues(v =>
-//            Async.memoize(
-//              JsonInString
-//                .make(toJsonLocal)(v),
-//            ),
-//          ),
-//        toJsonGlobal,
-//      )
-//    }
+    override def withArgs[A](
+        map: Map[String, A],
+    )(implicit logEncoder: LogEncoder[A]): ContextLogger[F] = {
+      new ContextLoggerImpl[F](
+        underlying,
+        context ++ map
+          .mapValues(v =>
+            Async.memoize(
+              JsonInString
+                .make(logEncoder.encode)(v),
+            ),
+          ),
+      )
+    }
 
     override def use[A](inner: F[A]): F[A] = {
       mapSequence(context).flatMap { contextMemoized =>

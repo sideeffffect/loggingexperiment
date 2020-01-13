@@ -13,14 +13,14 @@ trait ArgumentsBuilder[F[_]] {
       name: String,
       value: F[A],
   )(implicit logEncoder: LogEncoder[A]): Self
-  //def withArgs[A](map: Map[String, A], toJson: Option[A => String] = None): Self
+  def withArgs[A](map: Map[String, A])(implicit logEncoder: LogEncoder[A]): Self
 }
 
-trait LoggingContext[F[_]] extends StructuredLoggerArguments[F] {
+trait LoggingContext[F[_]] extends ArgumentsBuilder[F] {
   def use[A](inner: F[A]): F[A]
 }
 
-trait Logger[F[_]] extends StructuredLoggerArguments[F] {
+trait Logger[F[_]] extends ArgumentsBuilder[F] {
   def info: LoggerInfo[F]
   def warn: LoggerWarn[F]
 }
@@ -29,7 +29,7 @@ trait ContextLogger[F[_]] extends LoggingContext[F] with Logger[F] {
   type Self <: ContextLogger[F]
 }
 
-trait LogEncoder[A] {
+trait LogEncoder[-A] {
   def encode(a: A): String
 }
 

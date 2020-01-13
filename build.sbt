@@ -13,6 +13,7 @@ lazy val Version = new {
   val catsMtl = "0.7.0"
   val catsEffect = "2.0.0"
   val meowMtl = "0.4.0"
+  val circe = "0.13.0-M2"
 }
 
 lazy val root = project
@@ -24,6 +25,7 @@ lazy val root = project
   .aggregate(
     slf4catsApi,
     slf4catsImpl,
+    slf4catsCirce,
     slf4catsExample,
   )
 
@@ -51,6 +53,16 @@ lazy val slf4catsImpl = project
   )
   .dependsOn(slf4catsApi)
 
+lazy val slf4catsCirce = project
+  .in(file("slf4cats-circe"))
+  .settings(
+    name := "slf4cats-circe",
+    libraryDependencies ++= Seq(
+      "io.circe" %% "circe-core" % Version.circe,
+    ),
+  )
+  .dependsOn(slf4catsApi)
+
 lazy val slf4catsExample = project
   .in(file("slf4cats-example"))
   .settings(
@@ -59,6 +71,7 @@ lazy val slf4catsExample = project
       "ch.qos.logback" % "logback-classic" % Version.logback,
       "io.monix" %% "monix" % Version.monix,
       "com.olegpy" %% "meow-mtl-monix" % Version.meowMtl,
+      "io.circe" %% "circe-generic" % Version.circe,
     ),
   )
-  .dependsOn(slf4catsImpl)
+  .dependsOn(slf4catsImpl, slf4catsCirce)
